@@ -1,6 +1,9 @@
 import '@fontsource-variable/bricolage-grotesque/index.css';
 import '@fontsource-variable/plus-jakarta-sans/index.css';
 import './styles.css';
+import { miniLoader } from './loader.js';
+
+miniLoader();
 
 // Nav tucks away while reading, same as the legal pages.
 const nav = document.getElementById('nav');

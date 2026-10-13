@@ -1,6 +1,7 @@
 import '@fontsource-variable/bricolage-grotesque/index.css';
 import '@fontsource-variable/plus-jakarta-sans/index.css';
 import './styles.css';
+import { miniLoader } from './loader.js';
 
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
@@ -10,9 +11,10 @@ gsap.registerPlugin(ScrollTrigger);
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
-const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const finePointer = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
 const isMobile = () => window.innerWidth <= 980;
+// Animations are always on for phones and tablets, whatever the system motion setting says.
+const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches && !isMobile();
 
 /* ─────────── 1. Clone phone screens from <template>s ─────────── */
 $$('[data-clone]').forEach((host) => {
@@ -43,6 +45,7 @@ items.forEach((d) => {
 
 /* ─────────── Reduced motion: static page, clickable steps ─────────── */
 if (reduced) {
+  miniLoader();
   steps.forEach((s, n) => s.addEventListener('click', () => setStep(n)));
   $('#footWord').style.setProperty('--fill', '100%');
 } else {
@@ -220,6 +223,12 @@ function initMotion() {
   stepList.addEventListener('pointerenter', () => { howHovered = true; syncStepPlayback(); });
   stepList.addEventListener('pointerleave', () => { howHovered = false; syncStepPlayback(); });
   gsap.to('.how__halo', { scale: 1.25, rotate: 90, ease: 'none', scrollTrigger: { trigger: '.how', start: 'top bottom', end: 'bottom top', scrub: true } });
+
+  /* ── touch devices have no pointer parallax: give the hero a gentle idle float instead ── */
+  if (!finePointer) {
+    gsap.to('#heroPhone', { y: -12, rotateZ: 1.2, duration: 3.2, ease: 'sine.inOut', yoyo: true, repeat: -1 });
+    $$('.chip').forEach((c, i) => gsap.to(c, { y: i % 2 ? 10 : -10, duration: 2.4 + i * 0.4, ease: 'sine.inOut', yoyo: true, repeat: -1 }));
+  }
 
   /* ── apps: card spotlight + tilt ── */
   if (finePointer) {
