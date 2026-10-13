@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Delivas — la nourriture du campus, livrée à votre portail</title>
+  <meta name="description" content="Delivas amène vos cuisines préférées du campus jusqu’au portail de votre résidence, suivies en direct et remises avec un code à usage unique. Lancement prochain à Thiès." />
+  <meta name="theme-color" content="#032309" />
+  <meta property="og:title" content="Delivas — la nourriture du campus, livrée à votre portail" />
+  <meta property="og:description" content="Les cuisines du campus jusqu’au portail de votre résidence, suivies en direct et remises avec un code à usage unique. Lancement prochain à Thiès." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://kraveo.site/" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <script type="module" src="/src/main.js"></script>
+</head>
+<body>
+  <!-- Brand mark (simplified vector redraw of the Delivas bowl), recoloured through CSS variables -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <symbol id="kmark" viewBox="0 0 200 150">
+        <path class="m-body" d="M14 66Q18 118 70 130V142Q70 146 74 146H126Q130 146 130 142V130Q182 118 186 66Z" />
+        <rect class="m-body" x="12" y="8" width="24" height="64" rx="12" />
+        <rect class="m-body" x="164" y="8" width="24" height="64" rx="12" />
+        <rect class="m-body" x="20" y="6" width="160" height="14" rx="7" />
+        <rect class="m-band" x="6" y="50" width="188" height="20" />
+        <path class="m-band" d="M40 52Q42 32 60 32H90V38H64V46H90V52H64V60H90V66H60Q42 68 40 52Z" />
+        <ellipse class="m-band" cx="130" cy="51" rx="22" ry="17" />
+        <path class="m-smile" d="M62 98Q100 126 138 98" />
+        <circle class="m-dot" cx="61" cy="97" r="4.5" />
+        <circle class="m-dot" cx="139" cy="97" r="4.5" />
+      </symbol>
+    </defs>
+  </svg>
+
+  <div class="grain" aria-hidden="true"></div>
+  <div class="cursor" aria-hidden="true"><span class="cursor__ring"></span><span class="cursor__dot"></span></div>
+
+  <div class="loader" aria-hidden="true">
+    <svg class="loader__mark" viewBox="0 0 200 150"><use href="#kmark" /></svg>
+    <div class="loader__word"><span>D</span><span>E</span><span>L</span><span>I</span><span>V</span><span>A</span><span>S</span></div>
+  </div>
+
+  <header class="nav" id="nav">
+    <a class="nav__brand" href="/" aria-label="Accueil Delivas">
+      <svg class="nav__mark" viewBox="0 0 200 150" aria-hidden="true"><use href="#kmark" /></svg>
+      <span>Delivas</span>
+    </a>
+    <nav class="nav__links" aria-label="Principale">
+      <a href="#how" data-magnetic>Comment ça marche</a>
+      <a href="#apps" data-magnetic>Les applis</a>
+      <a href="#campus" data-magnetic>Sur le campus</a>
+      <a href="#faq" data-magnetic>FAQ</a>
+    </nav>
+    <a class="btn btn--yellow nav__cta" href="#launch" data-magnetic><span>Lancement prochain</span></a>
+  </header>
+
+  <main>
+    <!-- HERO -->
+    <section class="hero" id="top">
+      <div class="hero__bg" aria-hidden="true">
+        <div class="hero__glow hero__glow--a"></div>
+        <div class="hero__glow hero__glow--b"></div>
+        <svg class="hero__bigmark" viewBox="0 0 200 150"><use href="#kmark" /></svg>
+        <div class="hero__rings"><i></i><i></i><i></i></div>
+      </div>
+
+      <div class="hero__inner">
+        <div class="hero__copy">
+          <p class="pill" data-reveal><span class="pill__dot"></span>Lancement prochain · Thiès</p>
+          <h1 class="hero__title" data-split>
+            Un petit creux ?<br />
+            C’est déjà<br />
+            au <span class="hl"><span class="hl__text">portail</span><svg class="hl__smile" viewBox="0 0 120 26" aria-hidden="true"><path d="M4 6Q60 34 116 6" /></svg></span>.
+          </h1>
+          <p class="hero__sub" data-reveal>
+            Delivas vous relie aux cuisines du campus et amène le repas jusqu’au portail de votre résidence — suivi en direct, remis avec un code à usage unique. Plus besoin de courir après le livreur. Plus de repas froid.
+          </p>
+          <div class="hero__actions" data-reveal>
+            <a class="btn btn--yellow btn--lg" href="#how" data-magnetic><span>Voir comment ça marche</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg></a>
+            <a class="btn btn--ghost btn--lg" href="#launch" data-magnetic><span>Devenir partenaire</span></a>
+          </div>
+        </div>
+
+        <div class="hero__stage">
+          <div class="chip chip--a" data-depth="1.4"><i style="--c:#F5A524"></i>Commande passée</div>
+          <div class="chip chip--b" data-depth="-1"><i style="--c:#F97316"></i>En préparation</div>
+          <div class="chip chip--c" data-depth="1.8"><i style="--c:#3B82F6"></i>En route</div>
+          <div class="chip chip--d" data-depth="-1.6"><i style="--c:#8B5CF6"></i>À votre portail</div>
+
+          <div class="phone phone--hero" id="heroPhone">
+            <div class="phone__frame">
+              <div class="phone__island"></div>
+              <div class="phone__screen" data-clone="s-pick"></div>
+              <div class="phone__glare"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <a class="scrollhint" href="#how" aria-label="Défiler jusqu’à « Comment ça marche »">
+        <span>Défiler</span><i></i>
+      </a>
+    </section>
+
+    <!-- MARQUEE -->
+    <section class="marquee" aria-hidden="true">
+      <div class="marquee__track">
+        <div class="marquee__row">
+          <span>Thiéboudienne</span><b></b><span>Yassa</span><b></b><span>Mafé</span><b></b><span>Dibi</span><b></b><span>Fataya</span><b></b><span>Pastels</span><b></b><span>Bissap</span><b></b><span>Thiakry</span><b></b><span>Café Touba</span><b></b><span>Shawarma</span><b></b>
+        </div>
+        <div class="marquee__row">
+          <span>Thiéboudienne</span><b></b><span>Yassa</span><b></b><span>Mafé</span><b></b><span>Dibi</span><b></b><span>Fataya</span><b></b><span>Pastels</span><b></b><span>Bissap</span><b></b><span>Thiakry</span><b></b><span>Café Touba</span><b></b><span>Shawarma</span><b></b>
+        </div>
+      </div>
+    </section>
+
+    <!-- HOW IT WORKS (pinned) -->
+    <section class="how" id="how">
+      <div class="how__pin">
+        <div class="how__grid">
+          <div class="how__copy">
+            <p class="eyebrow" data-reveal>Comment ça marche</p>
+            <h2 class="display" data-split>De l’envie<br />à la <em>porte</em><br />en quatre clics.</h2>
+            <ol class="steps" id="steps">
+              <li class="step is-active" data-step="0">
+                <span class="step__n">01</span>
+                <div><h3>Choisissez une cuisine</h3><p>Parcourez les restaurants du campus, ajoutez ce que vous voulez et dites-nous où vous êtes — votre bloc de résidence, ou n’importe quel point de livraison si vous n’habitez pas en résidence.</p></div>
+              </li>
+              <li class="step" data-step="1">
+                <span class="step__n">02</span>
+                <div><h3>Payez d’un glissement</h3><p>Paiement en ligne via Razorpay, confirmé d’un seul glissement. Vos informations de paiement ne passent jamais par les serveurs de Delivas.</p></div>
+              </li>
+              <li class="step" data-step="2">
+                <span class="step__n">03</span>
+                <div><h3>Suivez son arrivée</h3><p>La cuisine accepte, prépare et confie la commande à un livreur. Vous voyez chaque changement de statut en direct sur la carte.</p></div>
+              </li>
+              <li class="step" data-step="3">
+                <span class="step__n">04</span>
+                <div><h3>Donnez le code au portail</h3><p>Votre livreur arrive, vous communiquez un code à usage unique, c’est fini. Pas de code, pas de remise — votre repas ne va qu’à vous.</p></div>
+              </li>
+            </ol>
+            <div class="progress" aria-hidden="true"><i id="progressBar"></i></div>
+          </div>
+
+          <div class="how__stage">
+            <div class="how__halo" aria-hidden="true"></div>
+            <div class="phone phone--how">
+              <div class="phone__frame">
+                <div class="phone__island"></div>
+                <div class="phone__screen phone__screen--stack" id="howScreens">
+                  <div class="screen is-on" data-screen="0" data-clone="s-pick"></div>
+                  <div class="screen" data-screen="1" data-clone="s-pay"></div>
+                  <div class="screen" data-screen="2" data-clone="s-track"></div>
+                  <div class="screen" data-screen="3" data-clone="s-gate"></div>
+                </div>
+                <div class="phone__glare"></div>
+              </div>
+            </div>
+            <p class="how__note">Interface à titre d’illustration</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- THE APPS -->
+    <section class="apps" id="apps">
+      <div class="wrap">
+        <p class="eyebrow eyebrow--light" data-reveal>Trois applis, une seule boucle</p>
+        <h2 class="display display--light" data-split>Une envie.<br />Une cuisine. <span class="y">Un livreur.</span></h2>
+
+        <div class="cards">
+          <article class="card" data-tilt>
+            <div class="card__spot"></div>
+            <div class="card__art card__art--customer" aria-hidden="true">
+              <div class="mini mini--a"><i></i><i></i><i></i></div>
+              <div class="mini mini--b"></div>
+            </div>
+            <p class="card__tag">Pour les gourmands</p>
+            <h3>Delivas</h3>
+            <p>Commandez dans les cuisines du campus, payez d’un glissement, suivez votre repas en direct et récupérez-le au portail avec un code à usage unique. Connectez-vous avec Google, choisissez un avatar mythique, c’est tout.</p>
+          </article>
+
+          <article class="card card--yellow" data-tilt>
+            <div class="card__spot"></div>
+            <div class="card__art card__art--vendor" aria-hidden="true">
+              <div class="ticket"><b>NOUVELLE</b><span></span><span></span></div>
+              <div class="ticket ticket--2"><b>EN CUISINE</b><span></span><span></span></div>
+              <div class="ticket ticket--3"><b>PRÊTE</b><span></span><span></span></div>
+            </div>
+            <p class="card__tag">Pour les cuisines</p>
+            <h3>Restaurant partenaire</h3>
+            <p>Une file de commandes claire, pensée pour un comptoir très occupé. Acceptez, marquez en préparation, marquez prête — le livreur est prévenu dès que le repas l’est. Votre menu, vos prix.</p>
+          </article>
+
+          <article class="card" data-tilt>
+            <div class="card__spot"></div>
+            <div class="card__art card__art--driver" aria-hidden="true">
+              <svg viewBox="0 0 220 120"><path class="route" d="M10 100Q50 20 100 70T210 20" /><circle class="rider" r="7" /></svg>
+            </div>
+            <p class="card__tag">Pour les livreurs</p>
+            <h3>Livreur partenaire</h3>
+            <p>Consultez votre commande assignée, récupérez-la, partagez votre position en direct pendant la livraison et confirmez la remise avec le code du client. Assez simple pour s’utiliser d’une seule main.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ON CAMPUS (bento) -->
+    <section class="campus" id="campus">
+      <div class="wrap">
+        <p class="eyebrow" data-reveal>Conçu pour le campus</p>
+        <h2 class="display" data-split>Fait pour les résidences,<br />pas pour l’autoroute.</h2>
+
+        <div class="bento">
+          <div class="tile tile--wide tile--green" data-reveal>
+            <h3>Chaque statut. Toujours synchronisé.</h3>
+            <p>Le client, la cuisine et le livreur voient le même état de la commande au même moment — un langage commun aux trois applis.</p>
+            <div class="rail" id="rail">
+              <span style="--c:#F5A524">Nouvelle</span>
+              <span style="--c:#14B8A6">Acceptée</span>
+              <span style="--c:#F97316">En préparation</span>
+              <span style="--c:#84CC16">Prête</span>
+              <span style="--c:#3B82F6">En route</span>
+              <span style="--c:#8B5CF6">Au portail</span>
+              <span style="--c:#16A34A">Livrée</span>
+            </div>
+          </div>
+
+          <div class="tile tile--yellow" data-reveal>
+            <h3>Code de portail à usage unique</h3>
+            <p>Le livreur ne peut pas remettre la commande sans lui. Votre commande ne va qu’à vous.</p>
+            <div class="otp" aria-hidden="true"><span>•</span><span>•</span><span>•</span><span>•</span></div>
+          </div>
+
+          <div class="tile tile--cream" data-reveal>
+            <h3>Pensé pour les résidences</h3>
+            <p>Les résidents choisissent leur bloc une seule fois. Les autres indiquent un point de livraison à la commande.</p>
+            <div class="blocks" aria-hidden="true"><i>Bloc 1</i><i>Bloc 2</i><i>Portail 3</i><i>Bibliothèque</i></div>
+          </div>
+
+          <div class="tile tile--dark" data-reveal>
+            <h3>Quinze créatures. Zéro selfie.</h3>
+            <p>Choisissez un avatar mythique plutôt qu’une photo. Nous retenons seulement lequel vous avez choisi.</p>
+            <div class="avatars" aria-hidden="true">
+              <i style="--h:140"></i><i style="--h:52"></i><i style="--h:265"></i><i style="--h:18"></i><i style="--h:190"></i><i style="--h:320"></i><i style="--h:96"></i><i style="--h:230"></i>
+            </div>
+          </div>
+
+          <div class="tile tile--wide tile--line" data-reveal>
+            <h3>Confidentialité dès la conception</h3>
+            <ul class="ticks">
+              <li>Connexion avec Google — n’importe quel Gmail convient</li>
+              <li>Aucune photo de profil enregistrée, juste un identifiant d’avatar</li>
+              <li>Paiements gérés par Razorpay, pas par nous</li>
+              <li>Supprimez votre compte depuis l’appli</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section class="faq" id="faq">
+      <div class="wrap faq__grid">
+        <div>
+          <p class="eyebrow" data-reveal>Questions</p>
+          <h2 class="display" data-split>De bonnes<br />questions.</h2>
+        </div>
+        <div class="acc" id="acc">
+          <details class="acc__item" open>
+            <summary><span>Où Delivas est-il disponible ?</span><i></i></summary>
+            <p>Nous démarrons à Thiès et lançons bientôt. Nous ajouterons d’autres campus une fois que le premier fonctionnera bien.</p>
+          </details>
+          <details class="acc__item">
+            <summary><span>Quand puis-je commander ?</span><i></i></summary>
+            <p>Bientôt. Nous préférons lancer correctement que lancer trop tôt, donc il n’y a pas encore de date publique. Cette page sera mise à jour dès que les applis seront en ligne.</p>
+          </details>
+          <details class="acc__item">
+            <summary><span>Comment payer ?</span><i></i></summary>
+            <p>Par paiement en ligne via Razorpay. Nous ne voyons ni ne stockons jamais votre numéro de carte ni vos codes de paiement.</p>
+          </details>
+          <details class="acc__item">
+            <summary><span>Je n’habite pas en résidence. Puis-je commander ?</span><i></i></summary>
+            <p>Oui. Connectez-vous avec n’importe quel compte Google, indiquez que vous n’habitez pas en résidence et choisissez un point de livraison à la commande.</p>
+          </details>
+          <details class="acc__item">
+            <summary><span>Je tiens une cuisine ou je veux livrer avec vous.</span><i></i></summary>
+            <p>Les comptes partenaires sont créés par nos soins, sans inscription libre. Contactez-nous ci-dessous et nous vous créerons un accès à l’appli Restaurant partenaire ou Livreur partenaire.</p>
+          </details>
+          <details class="acc__item">
+            <summary><span>Puis-je supprimer mes données ?</span><i></i></summary>
+            <p>Oui — supprimez votre compte depuis l’appli. Lisez précisément ce que nous collectons et conservons sur la <a href="/privacy">page de confidentialité</a>.</p>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="cta" id="launch">
+      <div class="cta__inner">
+        <svg class="cta__mark" viewBox="0 0 200 150" aria-hidden="true"><use href="#kmark" /></svg>
+        <h2 class="cta__title" data-split>Bientôt sur<br />votre campus.</h2>
+        <p class="cta__sub" data-reveal>Vous tenez une cuisine ? Vous voulez livrer ? Vous voulez Delivas dans votre établissement ? Écrivez-nous.</p>
+        <div class="cta__actions" data-reveal>
+          <a class="btn btn--dark btn--lg" href="mailto:kraveo.contact@gmail.com" data-magnetic><span>kraveo.contact@gmail.com</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg></a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <div class="foot__word" id="footWord" aria-hidden="true">DELIVAS</div>
+    <div class="foot__bar">
+      <p>© 2026 Delivas · Fait à Thiès</p>
+      <nav aria-label="Mentions légales"><a href="/privacy">Confidentialité</a><a href="/terms">Conditions</a><a href="/refunds">Remboursements</a><a href="/contact">Contact</a></nav>
+    </div>
+  </footer>
+
+  <!-- Phone screens (cloned into phones by JS) -->
+  <template id="s-pick">
+    <div class="ui ui--pick">
+      <div class="ui__bar"><span class="ui__loc"><b>Livrer à</b>Bloc 1 ▾</span><span class="ui__av"></span></div>
+      <div class="ui__search">Rechercher une cuisine ou un plat</div>
+      <div class="ui__chips"><i class="on">Tout</i><i>Dibi</i><i>Fataya</i><i>Bissap</i></div>
+      <div class="ui__cardr"><div class="ui__img ui__img--a"></div><div class="ui__meta"><b>Chez Fatou</b><span>Grillades · Dibi</span></div><em>Ouvert</em></div>
+      <div class="ui__cardr"><div class="ui__img ui__img--b"></div><div class="ui__meta"><b>Bissap &amp; Co</b><span>Jus · Snacks</span></div><em>Ouvert</em></div>
+      <div class="ui__cardr"><div class="ui__img ui__img--c"></div><div class="ui__meta"><b>Teranga Express</b><span>Cuisine sénégalaise</span></div><em>Ouvert</em></div>
+      <div class="ui__dock"><i class="on"></i><i></i><i></i><i></i></div>
+    </div>
+  </template>
+
+  <template id="s-pay">
+    <div class="ui ui--pay">
+      <div class="ui__title">Votre commande</div>
+      <div class="ui__line"><span>2 × Sandwich poulet</span><b>3 000 FCFA</b></div>
+      <div class="ui__line"><span>1 × Jus de bissap</span><b>500 FCFA</b></div>
+      <div class="ui__line ui__line--muted"><span>Livraison</span><b>500 FCFA</b></div>
+      <div class="ui__sum"><span>Total</span><b>4 000 FCFA</b></div>
+      <div class="ui__upi"><i>PAY</i><span>Payer en ligne en toute sécurité</span></div>
+      <div class="ui__slide"><span class="ui__knob"></span><em>Glisser pour payer</em></div>
+    </div>
+  </template>
+
+  <template id="s-track">
+    <div class="ui ui--track">
+      <div class="ui__map">
+        <svg viewBox="0 0 240 300" preserveAspectRatio="xMidYMid slice">
+          <path class="g" d="M0 60H240M0 130H240M0 200H240M0 270H240M50 0V300M120 0V300M190 0V300" />
+          <path class="r" d="M30 270Q30 200 100 190T180 110T200 40" />
+          <circle class="h" cx="200" cy="40" r="9" />
+          <circle class="k" cx="30" cy="270" r="9" />
+          <circle class="d" r="8" />
+        </svg>
+      </div>
+      <div class="ui__sheet">
+        <span class="ui__status">En route</span>
+        <b>Votre commande est en chemin</b>
+        <div class="ui__bars"><i class="on"></i><i class="on"></i><i class="on"></i><i></i></div>
+      </div>
+    </div>
+  </template>
+
+  <template id="s-gate">
+    <div class="ui ui--gate">
+      <span class="ui__status ui__status--gate">À votre portail</span>
+      <b class="ui__big">Votre livreur est arrivé</b>
+      <div class="ui__code"><i>7</i><i>3</i><i>1</i><i>9</i></div>
+      <p>Communiquez ce code uniquement à votre livreur, au portail.</p>
+      <div class="ui__ok">Livrée ✓</div>
+    </div>
+  </template>
+</body>
+</html>
