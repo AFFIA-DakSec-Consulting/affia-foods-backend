@@ -2,6 +2,11 @@ import '@fontsource-variable/bricolage-grotesque/index.css';
 import '@fontsource-variable/plus-jakarta-sans/index.css';
 import './styles.css';
 import { miniLoader } from './loader.js';
+import { initLang } from './lang.js';
+import { initDownload } from './download.js';
+
+initLang();
+initDownload();
 
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
@@ -54,6 +59,7 @@ if (reduced) {
 
 function initMotion() {
   document.documentElement.classList.add('js-motion');
+  document.documentElement.classList.remove('is-booting');
   window.scrollTo(0, 0);
   if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
 
@@ -122,7 +128,6 @@ function initMotion() {
   gsap.set('.chip', { scale: 0.6, opacity: 0 });
   gsap.set('.scrollhint', { opacity: 0 });
   gsap.set('.loader__word span', { yPercent: 110 });
-  gsap.set('.loader__mark', { scale: 0.6, opacity: 0 });
 
   /* ── loader → hero intro ── */
   const intro = gsap.timeline({ defaults: { ease: 'expo.out' }, paused: true, onComplete: () => lenis.start() });
@@ -138,8 +143,7 @@ function initMotion() {
 
   const loader = gsap.timeline({ onComplete: () => { $('.loader').style.display = 'none'; } });
   loader
-    .to('.loader__mark', { scale: 1, opacity: 1, duration: 0.7, ease: 'back.out(1.6)' })
-    .to('.loader__word span', { yPercent: 0, duration: 0.6, stagger: 0.05, ease: 'power4.out' }, 0.2)
+    .to('.loader__word span', { yPercent: 0, duration: 0.6, stagger: 0.05, ease: 'power4.out' }, 0.1)
     .to('.loader', { yPercent: -100, duration: 0.9, ease: 'power4.inOut' }, '+=0.35')
     .add(() => intro.play(), '-=0.45');
 

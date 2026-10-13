@@ -7,12 +7,13 @@ export function miniLoader() {
     el.className = 'loader';
     el.setAttribute('aria-hidden', 'true');
     el.innerHTML =
-      '<svg class="loader__mark" viewBox="0 0 200 150"><use href="#kmark" /></svg>' +
+      '<img class="loader__mark" src="/mark.svg" alt="" width="120" height="90" />' +
       '<div class="loader__word">AFFIA FOODS</div>' +
       '<p class="loader__by">Propulsé par <b>DakSec Consulting</b></p>';
     document.body.prepend(el);
   }
   el.classList.add('loader--mini');
+  document.documentElement.classList.remove('is-booting');
   el.addEventListener('animationend', (e) => { if (e.animationName === 'loaderOut') el.remove(); });
   setTimeout(() => el.remove(), 3000);
 }

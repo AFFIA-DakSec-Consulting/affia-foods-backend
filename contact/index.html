@@ -4,9 +4,28 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Contact — Affia Foods</title>
-  <meta name="description" content="Parlez à Affia Foods : aide pour une commande, partenariat restaurant, livrer avec nous, ou amener Affia Foods sur votre campus." />
+  <meta name="description" content="Parlez à Affia Foods : aide pour une commande, partenariat restaurant, livrer avec nous, ou amener Affia Foods dans votre ville." />
   <meta name="theme-color" content="#032309" />
+  <link rel="canonical" href="https://affiafoods.com/contact" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Affia Foods" />
+  <meta property="og:locale" content="fr_FR" />
+  <meta property="og:url" content="https://affiafoods.com/contact" />
+  <meta property="og:title" content="Contact — Affia Foods" />
+  <meta property="og:description" content="Parlez à Affia Foods : aide pour une commande, partenariat restaurant, livrer avec nous, ou amener Affia Foods dans votre ville." />
+  <meta property="og:image" content="https://affiafoods.com/og-image.png" />
+  <meta property="og:image:type" content="image/png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Affia Foods — vos plats préférés, livrés chez vous" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Contact — Affia Foods" />
+  <meta name="twitter:description" content="Parlez à Affia Foods : aide pour une commande, partenariat restaurant, livrer avec nous, ou amener Affia Foods dans votre ville." />
+  <meta name="twitter:image" content="https://affiafoods.com/og-image.png" />
+  <meta name="twitter:image:alt" content="Affia Foods — vos plats préférés, livrés chez vous" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <style>html.is-booting{background:#032309}html.is-booting body{visibility:hidden}html.is-booting::before{content:'';position:fixed;inset:0;z-index:9999;background:#032309 url('/mark.svg') center calc(50% - 25px)/120px 90px no-repeat}</style>
+  <script>document.documentElement.classList.add('is-booting');setTimeout(function(){document.documentElement.classList.remove('is-booting')},4000);</script>
   <script type="module" src="/src/contact.js"></script>
 </head>
 <body class="contact-page">
@@ -20,8 +39,30 @@
   <div class="grain" aria-hidden="true"></div>
   <header class="nav" id="nav">
     <a class="nav__brand" href="/" aria-label="Accueil Affia Foods"><svg class="nav__mark" viewBox="0 0 200 150" aria-hidden="true"><use href="#kmark" /></svg><span>AFFIA FOODS</span></a>
-    <nav class="nav__links" aria-label="Principale"><a href="/privacy">Confidentialité</a><a href="/terms">Conditions</a><a href="/refunds">Remboursements</a><a href="/contact">Contact</a></nav>
+    <nav class="nav__links" aria-label="Principale">
+      <a href="/">Accueil</a>
+      <a href="/partenaire">Devenir partenaire</a>
+      <a href="/livreur">Devenir livreur</a>
+      <a href="/#apps">Les apps</a>
+      <div class="nav__dd" data-dd>
+        <button class="nav__ddbtn" type="button" aria-haspopup="true" aria-expanded="false">Sur nous<i aria-hidden="true"></i></button>
+        <ul class="nav__ddmenu">
+          <li><a href="/#faq">FAQ</a></li>
+          <li><a href="/contact" aria-current="page">Contact</a></li>
+        </ul>
+      </div>
+    </nav>
+    <div class="nav__right">
+      <div class="lang" data-lang>
+      <button class="lang__btn" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Langue : Français"><svg viewBox="0 0 30 20" aria-hidden="true"><rect width="10" height="20" fill="#0055A4"/><rect x="10" width="10" height="20" fill="#fff"/><rect x="20" width="10" height="20" fill="#EF4135"/></svg><span>FR</span><i aria-hidden="true"></i></button>
+      <ul class="lang__menu" role="menu">
+        <li role="none"><a role="menuitem" href="#" data-lang-code="fr" aria-current="true"><svg viewBox="0 0 30 20" aria-hidden="true"><rect width="10" height="20" fill="#0055A4"/><rect x="10" width="10" height="20" fill="#fff"/><rect x="20" width="10" height="20" fill="#EF4135"/></svg><span>Français</span></a></li>
+        <li role="none"><a role="menuitem" href="#" data-lang-code="en"><svg viewBox="0 0 60 40" aria-hidden="true"><rect width="60" height="40" fill="#012169"/><path d="M0 0L60 40M60 0L0 40" stroke="#fff" stroke-width="8"/><path d="M0 0L60 40M60 0L0 40" stroke="#C8102E" stroke-width="3"/><path d="M30 0V40M0 20H60" stroke="#fff" stroke-width="12"/><path d="M30 0V40M0 20H60" stroke="#C8102E" stroke-width="7"/></svg><span>English</span></a></li>
+        <li role="none"><a role="menuitem" href="#" data-lang-code="sn"><svg viewBox="0 0 30 20" aria-hidden="true"><rect width="10" height="20" fill="#00853F"/><rect x="10" width="10" height="20" fill="#FDEF42"/><rect x="20" width="10" height="20" fill="#E31B23"/><path d="M15 6.2l1.06 3.26h3.43l-2.78 2.02 1.06 3.26L15 12.72l-2.77 2.02 1.06-3.26-2.78-2.02h3.43z" fill="#00853F"/></svg><span>Wolof</span></a></li>
+      </ul>
+    </div>
     <a class="btn btn--yellow nav__cta" href="/"><span>Retour à l’accueil</span></a>
+    </div>
   </header>
   <main class="ct">
     <section class="ct-hero">
@@ -33,7 +74,7 @@
       <div class="ct-hero__inner">
         <p class="eyebrow eyebrow--light">Contact</p>
         <h1 class="ct-title"><span class="ct-line"><span>Dites</span></span> <span class="ct-line ct-line--y"><span>bonjour.</span></span></h1>
-        <p class="ct-sub">Une commande qui a mal tourné ? Vous tenez une cuisine ? Vous voulez livrer ? Vous voulez Affia Foods dans votre établissement ? Écrivez-nous. Une vraie personne lit chaque message.</p>
+        <p class="ct-sub">Une commande qui a mal tourné ? Vous tenez une cuisine ? Vous voulez livrer ? Vous voulez Affia Foods dans votre ville ? Écrivez-nous. Une vraie personne lit chaque message.</p>
         <div class="ct-mail">
           <a class="btn btn--yellow btn--lg" href="mailto:support@affiafoods.com"><span>support@affiafoods.com</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg></a>
           <button class="ct-copy" type="button" id="copyMail" data-mail="support@affiafoods.com" aria-live="polite"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15V6.5A2.5 2.5 0 0 1 7.5 4H15"/></svg><span>Copier l’adresse</span></button>
@@ -46,32 +87,32 @@
         <p class="eyebrow">Choisissez votre porte</p>
         <h2 class="ct-h2">Qui êtes-vous ?</h2>
         <div class="ct-grid">
-        <a class="ct-card ct-card--dark" data-spot data-in href="mailto:support@affiafoods.com?subject=Aide%20pour%20ma%20commande%20Affia Foods">
+        <a class="ct-card ct-card--dark" data-spot data-in href="mailto:support@affiafoods.com?subject=Aide%20pour%20ma%20commande%20Affia%20Foods">
           <span class="ct-card__spot"></span>
           <span class="ct-card__tag">Clients</span>
           <h3>Un petit creux, ou un problème ?</h3>
           <p>Donnez-nous votre numéro de commande et ce qui s’est passé. Nous réglerons les remboursements, les articles manquants et les problèmes de paiement.</p>
           <span class="ct-card__go">Obtenir de l’aide<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg></span>
         </a>
-        <a class="ct-card ct-card--yellow" data-spot data-in href="mailto:support@affiafoods.com?subject=Partenariat%20restaurant">
+        <a class="ct-card ct-card--yellow" data-spot data-in href="/partenaire">
           <span class="ct-card__spot"></span>
           <span class="ct-card__tag">Restaurants</span>
-          <h3>Vous tenez une cuisine sur le campus ?</h3>
-          <p>Mettez votre menu sous les yeux de tout le campus. Nous gérons les commandes, les livreurs et les paiements.</p>
+          <h3>Vous tenez un restaurant ?</h3>
+          <p>Mettez votre menu sous les yeux de toute votre ville. Nous gérons les commandes, les livreurs et les paiements.</p>
           <span class="ct-card__go">Devenir partenaire<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg></span>
         </a>
-        <a class="ct-card ct-card--dark" data-spot data-in href="mailto:support@affiafoods.com?subject=Candidature%20livreur%20partenaire">
+        <a class="ct-card ct-card--dark" data-spot data-in href="/livreur">
           <span class="ct-card__spot"></span>
           <span class="ct-card__tag">Livreurs</span>
           <h3>Envie de livrer avec Affia Foods ?</h3>
-          <p>Horaires flexibles, livraisons locales autour du campus. Parlez-nous un peu de vous et nous vous mettrons en route.</p>
+          <p>Horaires flexibles, courses courtes dans votre ville. Parlez-nous un peu de vous et nous vous mettrons en route.</p>
           <span class="ct-card__go">Livrer avec nous<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg></span>
         </a>
-        <a class="ct-card ct-card--dark" data-spot data-in href="mailto:support@affiafoods.com?subject=Amener%20Affia Foods%20sur%20mon%20campus">
+        <a class="ct-card ct-card--dark" data-spot data-in href="mailto:support@affiafoods.com?subject=Amener%20Affia%20Foods%20dans%20ma%20ville">
           <span class="ct-card__spot"></span>
-          <span class="ct-card__tag">Campus</span>
-          <h3>Affia Foods dans votre établissement ?</h3>
-          <p>Nous démarrons à Thiès. Si votre campus a besoin d’une meilleure façon de manger, parlons-en.</p>
+          <span class="ct-card__tag">Villes</span>
+          <h3>Affia Foods dans votre ville ?</h3>
+          <p>Nous démarrons à Thiès et ouvrirons d’autres villes ensuite. Vous voulez Affia Foods près de chez vous ? Parlons-en.</p>
           <span class="ct-card__go">Engager la conversation<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg></span>
         </a>
         </div>
@@ -93,7 +134,7 @@
   </main>
   <footer class="foot">
     <div class="foot__word foot__word--static" aria-hidden="true">AFFIA FOODS</div>
-    <div class="foot__bar"><p>© 2026 Affia Foods · Fait à Thiès · Propulsé par <b>DakSec Consulting</b></p><nav aria-label="Mentions légales"><a href="/privacy">Confidentialité</a><a href="/terms">Conditions</a><a href="/refunds">Remboursements</a><a href="/contact">Contact</a></nav></div>
+    <div class="foot__bar"><p>© 2026 Affia Foods · Fait au Sénégal · Propulsé par <b>DakSec Consulting</b></p><nav aria-label="Mentions légales"><a href="/privacy">Confidentialité</a><a href="/terms">Conditions</a><a href="/refunds">Remboursements</a><a href="/contact">Contact</a></nav></div>
   </footer>
 </body>
 </html>
