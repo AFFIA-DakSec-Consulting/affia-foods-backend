@@ -196,28 +196,30 @@ function initMotion() {
     gsap.set(track, { x: mx, skewX: -skew });
   });
 
-  /* ── How it works: pinned, scroll-scrubbed steps ── */
-  ScrollTrigger.matchMedia({
-    all: () => {
-      const st = ScrollTrigger.create({
-        trigger: '.how__pin',
-        start: 'top top',
-        end: () => (isMobile() ? '+=260%' : '+=320%'),
-        pin: true,
-        anticipatePin: 1,
-        scrub: true,
-        invalidateOnRefresh: true,
-        onUpdate: (self) => {
-          setStep(Math.min(3, Math.floor(self.progress * 4)));
-          gsap.set('#progressBar', { scaleX: Math.max(0.02, self.progress) });
-        },
-      });
-      steps.forEach((s, n) =>
-        s.addEventListener('click', () => lenis.scrollTo(st.start + ((n + 0.5) / 4) * (st.end - st.start), { duration: 1.4 })),
-      );
-      gsap.to('.how__halo', { scale: 1.25, rotate: 90, ease: 'none', scrollTrigger: { trigger: '.how__pin', start: 'top top', end: () => st.end, scrub: true } });
-    },
+  /* ── How it works: no pin, the steps play on their own while the section is on screen ── */
+  const STEP_SECONDS = 3.6;
+  let stepTween = null;
+  let howVisible = false;
+  let howHovered = false;
+  const playStep = (n) => {
+    if (stepTween) stepTween.kill();
+    setStep(n);
+    stepTween = gsap.fromTo('#progressBar', { scaleX: Math.max(0.02, n / 4) }, {
+      scaleX: (n + 1) / 4, duration: STEP_SECONDS, ease: 'none', paused: !howVisible || howHovered,
+      onComplete: () => playStep((n + 1) % 4),
+    });
+  };
+  const syncStepPlayback = () => { if (stepTween) stepTween.paused(!howVisible || howHovered); };
+  playStep(0);
+  ScrollTrigger.create({
+    trigger: '.how', start: 'top 70%', end: 'bottom 30%',
+    onToggle: (self) => { howVisible = self.isActive; syncStepPlayback(); },
   });
+  steps.forEach((s, n) => s.addEventListener('click', () => playStep(n)));
+  const stepList = $('#steps');
+  stepList.addEventListener('pointerenter', () => { howHovered = true; syncStepPlayback(); });
+  stepList.addEventListener('pointerleave', () => { howHovered = false; syncStepPlayback(); });
+  gsap.to('.how__halo', { scale: 1.25, rotate: 90, ease: 'none', scrollTrigger: { trigger: '.how', start: 'top bottom', end: 'bottom top', scrub: true } });
 
   /* ── apps: card spotlight + tilt ── */
   if (finePointer) {
