@@ -1,28 +1,55 @@
-# Kraveo
+# Affia Foods
 
-Plateforme de livraison de repas pour le campus de **VIT Bhopal** : les dhabas (restaurants) de l'autoroute Ashta–Kothri livrent les étudiants jusqu'aux points de dépôt des résidences (BH1…BH8, Special Block, GH1, GH2). Les livreurs n'entrent pas dans les résidences : la remise se fait à la porte avec un **code OTP à 4 chiffres** vérifié par le serveur.
+Plateforme de livraison de repas à **Thiès (Sénégal)** : des restaurants partenaires, des livreurs, des clients, et une équipe d'administration. Un restaurant prépare, un livreur récupère, le client reçoit et donne un **code à 4 chiffres** au livreur à la porte.
 
-## Organisation du dossier
+> Le projet s'appelait « Kraveo ». Les noms techniques hérités (`kraveo_*`, classes `kraveo-*`, `api.kraveo.site`, codes promo `KRAVEO20`) sont conservés tant qu'ils n'ont pas été migrés.
+
+## Organisation du dépôt (monorepo)
 
 ```
-kraevoapp/
-├── backend/            API Node.js + temps réel (Socket.io)
+affia-foods/
+├── backend/            API Node.js + temps réel (Socket.io)               -> api.<domaine>
 ├── web/
-│   ├── super_admin/    Tableau de bord administrateur (React)
-│   └── landing/        Site vitrine public
-├── flutter/
-│   ├── apps/
-│   │   ├── customer_app/   App étudiant (commande)
-│   │   ├── vendor_app/     App restaurant partenaire
-│   │   └── driver_app/     App livreur
-│   ├── packages/kraveo_ui/ Design system partagé par les 3 apps
-│   ├── scripts/build_mobile_apks.sh
-│   └── *.png               Logos utilisés pour les icônes des apps
-└── Docs/               Spécifications et contrats d'API (Docs/14 à Docs/22)
+│   ├── landing/        Site vitrine public (Vite, JS)                      -> <domaine>
+│   └── super_admin/    Tableau de bord admin + espace restaurant (React)   -> admin.<domaine>
+├── flutter/            Applications mobiles (client, restaurant, livreur) + design system
+├── mobileapp/          Copie des applications Flutter (à clarifier : doublon de flutter/)
+└── Docs/               Spécifications et contrats d'API (Docs/14 à Docs/24)
 ```
 
-Tous les clients (3 apps Flutter + dashboard web) parlent au même backend via REST (`/api`) et Socket.io.
-Production : `https://api.kraveo.site`.
+Tous les clients (applications Flutter et tableau de bord) parlent au même backend via REST (`/api`) et Socket.io.
+
+## Déploiement
+
+Chaque site web est déployé **séparément**, depuis son sous-dossier, avec son propre domaine. Un changement dans `web/super_admin` ne doit pas reconstruire `web/landing`, et inversement.
+
+### Netlify (actuel)
+
+Créer **deux sites** Netlify à partir du même dépôt Git. Chaque site lit le `netlify.toml` de son dossier (build, publication, redirections, en-têtes de sécurité) : seul le « Base directory » est à renseigner.
+
+| Site Netlify | Base directory | Commande / dossier publié | Domaine (à définir) |
+|---|---|---|---|
+| affia-landing | `web/landing` | `npm run build` / `dist` | `<domaine>` |
+| affia-admin | `web/super_admin` | `npm run build` / `dist` | `admin.<domaine>` |
+
+Réglage conseillé pour chaque site : *Site configuration > Build & deploy > Build settings > Ignore builds* avec la commande `git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- .` : le site ne se reconstruit que si son propre dossier a changé.
+
+L'adresse de l'API est dans `web/super_admin/netlify.toml` (`VITE_API_BASE_URL`, `VITE_SOCKET_URL`, la règle `/api/*` et `connect-src`). **Elle doit être changée aux quatre endroits** quand le domaine de l'API change.
+
+### Dokploy (prévu : serveur auto-hébergé)
+
+Chaque site a un `Dockerfile` (construction avec Node, service avec nginx) : `web/landing/Dockerfile` et `web/super_admin/Dockerfile`. Dans Dokploy, créer une application par site, source Git, *Build type* = Dockerfile, *Build path* = le sous-dossier.
+
+- **Tableau de bord** : arguments de build `VITE_API_BASE_URL` et `VITE_SOCKET_URL` ; variables d'exécution `API_ORIGIN` (ex. `https://api.exemple.com`) et `API_WS_ORIGIN` (ex. `wss://api.exemple.com`), reprises par la règle de sécurité et le relais `/api`.
+- **Backend** : `backend/Dockerfile` et `backend/docker-compose.yml` (PostgreSQL + API). Monter un **volume persistant** sur `/app/public/uploads` (photos des restaurants) et fournir les variables de `backend/.env.example`.
+
+## Développement local
+
+```bash
+cd backend && docker compose up -d --build        # API sur http://localhost:5001
+cd web/super_admin && npm install && npm run dev  # http://localhost:3000
+cd web/landing && npm install && npm run dev      # http://localhost:5173
+```
 
 ---
 
