@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Affia Foods — vos plats préférés, livrés chez vous</title>
+  <meta name="description" content="Affia Foods réunit les meilleurs restaurants de votre ville dans une seule appli : commandez en quelques secondes, suivez votre livreur en direct et recevez votre repas à votre porte. Lancement à Thiès, puis dans d’autres villes du Sénégal." />
+  <meta name="theme-color" content="#032309" />
+  <link rel="canonical" href="https://affiafoods.com/" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Affia Foods" />
+  <meta property="og:locale" content="fr_FR" />
+  <meta property="og:url" content="https://affiafoods.com/" />
+  <meta property="og:title" content="Affia Foods — vos plats préférés, livrés chez vous" />
+  <meta property="og:description" content="Les meilleurs restaurants de votre ville, livrés à votre porte. Suivi en direct, paiement Wave, Orange Money ou espèces. Lancement à Thiès." />
+  <meta property="og:image" content="https://affiafoods.com/og-image.png" />
+  <meta property="og:image:type" content="image/png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Affia Foods — vos plats préférés, livrés chez vous" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Affia Foods — vos plats préférés, livrés chez vous" />
+  <meta name="twitter:description" content="Les meilleurs restaurants de votre ville, livrés à votre porte. Suivi en direct, paiement Wave, Orange Money ou espèces. Lancement à Thiès." />
+  <meta name="twitter:image" content="https://affiafoods.com/og-image.png" />
+  <meta name="twitter:image:alt" content="Affia Foods — vos plats préférés, livrés chez vous" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <style>html.is-booting{background:#032309}html.is-booting body{visibility:hidden}html.is-booting::before{content:'';position:fixed;inset:0;z-index:9999;background:#032309 url('/mark.svg') center calc(50% - 25px)/120px 90px no-repeat}</style>
+  <script>document.documentElement.classList.add('is-booting');setTimeout(function(){document.documentElement.classList.remove('is-booting')},4000);</script>
+  <script type="module" src="/src/main.js"></script>
+</head>
+<body>
+  <!-- Brand mark (simplified vector redraw of the Affia Foods bowl), recoloured through CSS variables -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <symbol id="kmark" viewBox="0 0 200 150">
+        <path class="m-body" d="M14 66Q18 118 70 130V142Q70 146 74 146H126Q130 146 130 142V130Q182 118 186 66Z" />
+        <rect class="m-body" x="12" y="8" width="24" height="64" rx="12" />
+        <rect class="m-body" x="164" y="8" width="24" height="64" rx="12" />
+        <rect class="m-body" x="20" y="6" width="160" height="14" rx="7" />
+        <rect class="m-band" x="6" y="50" width="188" height="20" />
+        <path class="m-band" d="M40 52Q42 32 60 32H90V38H64V46H90V52H64V60H90V66H60Q42 68 40 52Z" />
+        <ellipse class="m-band" cx="130" cy="51" rx="22" ry="17" />
+        <path class="m-smile" d="M62 98Q100 126 138 98" />
+        <circle class="m-dot" cx="61" cy="97" r="4.5" />
+        <circle class="m-dot" cx="139" cy="97" r="4.5" />
+      </symbol>
+    </defs>
+  </svg>
+
+  <div class="grain" aria-hidden="true"></div>
+  <div class="cursor" aria-hidden="true"><span class="cursor__ring"></span><span class="cursor__dot"></span></div>
+
+  <div class="loader" aria-hidden="true">
+    <img class="loader__mark" src="/mark.svg" alt="" width="120" height="90" />
+    <div class="loader__word"><span>A</span><span>F</span><span>F</span><span>I</span><span>A</span><span class="sp"> </span><span>F</span><span>O</span><span>O</span><span>D</span><span>S</span></div>
+    <p class="loader__by">Propulsé par <b>DakSec Consulting</b></p>
+  </div>
+
+  <header class="nav" id="nav">
+    <a class="nav__brand" href="/" aria-label="Accueil Affia Foods">
+      <svg class="nav__mark" viewBox="0 0 200 150" aria-hidden="true"><use href="#kmark" /></svg>
+      <span>AFFIA FOODS</span>
+    </a>
+    <nav class="nav__links" aria-label="Principale">
+      <a href="#top" aria-current="page">Accueil</a>
+      <a href="/partenaire">Devenir partenaire</a>
+      <a href="/livreur">Devenir livreur</a>
+      <a href="#apps">Les apps</a>
+      <div class="nav__dd" data-dd>
+        <button class="nav__ddbtn" type="button" aria-haspopup="true" aria-expanded="false">Sur nous<i aria-hidden="true"></i></button>
+        <ul class="nav__ddmenu">
+          <li><a href="#faq">FAQ</a></li>
+          <li><a href="/contact">Contact</a></li>
+        </ul>
+      </div>
+    </nav>
+    <div class="nav__right">
+      <div class="lang" data-lang>
+      <button class="lang__btn" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Langue : Français"><svg viewBox="0 0 30 20" aria-hidden="true"><rect width="10" height="20" fill="#0055A4"/><rect x="10" width="10" height="20" fill="#fff"/><rect x="20" width="10" height="20" fill="#EF4135"/></svg><span>FR</span><i aria-hidden="true"></i></button>
+      <ul class="lang__menu" role="menu">
+        <li role="none"><a role="menuitem" href="#" data-lang-code="fr" aria-current="true"><svg viewBox="0 0 30 20" aria-hidden="true"><rect width="10" height="20" fill="#0055A4"/><rect x="10" width="10" height="20" fill="#fff"/><rect x="20" width="10" height="20" fill="#EF4135"/></svg><span>Français</span></a></li>
+        <li role="none"><a role="menuitem" href="#" data-lang-code="en"><svg viewBox="0 0 60 40" aria-hidden="true"><rect width="60" height="40" fill="#012169"/><path d="M0 0L60 40M60 0L0 40" stroke="#fff" stroke-width="8"/><path d="M0 0L60 40M60 0L0 40" stroke="#C8102E" stroke-width="3"/><path d="M30 0V40M0 20H60" stroke="#fff" stroke-width="12"/><path d="M30 0V40M0 20H60" stroke="#C8102E" stroke-width="7"/></svg><span>English</span></a></li>
+        <li role="none"><a role="menuitem" href="#" data-lang-code="sn"><svg viewBox="0 0 30 20" aria-hidden="true"><rect width="10" height="20" fill="#00853F"/><rect x="10" width="10" height="20" fill="#FDEF42"/><rect x="20" width="10" height="20" fill="#E31B23"/><path d="M15 6.2l1.06 3.26h3.43l-2.78 2.02 1.06 3.26L15 12.72l-2.77 2.02 1.06-3.26-2.78-2.02h3.43z" fill="#00853F"/></svg><span>Wolof</span></a></li>
+      </ul>
+    </div>
+    <a class="btn btn--yellow nav__cta" href="#join" data-magnetic><span>Nous rejoindre</span></a>
+    </div>
+  </header>
+
+  <main>
+    <!-- HERO -->
+    <section class="hero" id="top">
+      <div class="hero__bg" aria-hidden="true">
+        <div class="hero__glow hero__glow--a"></div>
+        <div class="hero__glow hero__glow--b"></div>
+        <svg class="hero__bigmark" viewBox="0 0 200 150"><use href="#kmark" /></svg>
+        <div class="hero__rings"><i></i><i></i><i></i></div>
+      </div>
+
+      <div class="hero__inner">
+        <div class="hero__copy">
+          <p class="pill" data-reveal><span class="pill__dot"></span>Lancement à Thiès · Bientôt partout au Sénégal</p>
+          <h1 class="hero__title" data-split>
+            Vos plats<br />
+            préférés,<br />
+            livrés <span class="hl"><span class="hl__text">vite</span><svg class="hl__smile" viewBox="0 0 120 26" aria-hidden="true"><path d="M4 6Q60 34 116 6" /></svg></span>.
+          </h1>
+          <p class="hero__sub" data-reveal>
+            Affia Foods réunit les meilleurs restaurants de votre ville dans une seule appli. Commandez en quelques secondes, suivez votre livreur en direct sur la carte et recevez votre repas bien chaud, à votre porte.
+          </p>
+          <div class="hero__actions" data-reveal>
+            <a class="btn btn--yellow btn--lg" href="#how" data-magnetic><span>Découvrir l’appli</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg></a>
+            <a class="btn btn--ghost btn--lg" href="/partenaire" data-magnetic><span>Devenir partenaire</span></a>
+          </div>
+        </div>
+
+        <div class="hero__stage">
+          <div class="chip chip--a" data-depth="1.4"><i style="--c:#F5A524"></i>Commande reçue</div>
+          <div class="chip chip--b" data-depth="-1"><i style="--c:#F97316"></i>En cuisine</div>
+          <div class="chip chip--c" data-depth="1.8"><i style="--c:#3B82F6"></i>En route</div>
+          <div class="chip chip--d" data-depth="-1.6"><i style="--c:#8B5CF6"></i>Arrivé chez vous</div>
+
+          <div class="phone phone--hero" id="heroPhone">
+            <div class="phone__frame">
+              <div class="phone__island"></div>
+              <div class="phone__screen" data-clone="s-pick"></div>
+              <div class="phone__glare"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <a class="scrollhint" href="#how" aria-label="Défiler jusqu’à « Comment ça marche »">
+        <span>Défiler</span><i></i>
+      </a>
+    </section>
+
+    <!-- MARQUEE -->
+    <section class="marquee" aria-hidden="true">
+      <div class="marquee__track">
+        <div class="marquee__row">
+          <span>Thiéboudienne</span><b></b><span>Yassa</span><b></b><span>Mafé</span><b></b><span>Dibi</span><b></b><span>Fataya</span><b></b><span>Pastels</span><b></b><span>Burgers</span><b></b><span>Pizzas</span><b></b><span>Bissap</span><b></b><span>Café Touba</span><b></b>
+        </div>
+        <div class="marquee__row">
+          <span>Thiéboudienne</span><b></b><span>Yassa</span><b></b><span>Mafé</span><b></b><span>Dibi</span><b></b><span>Fataya</span><b></b><span>Pastels</span><b></b><span>Burgers</span><b></b><span>Pizzas</span><b></b><span>Bissap</span><b></b><span>Café Touba</span><b></b>
+        </div>
+      </div>
+    </section>
+
+    <!-- HOW IT WORKS -->
+    <section class="how" id="how">
+      <div class="how__pin">
+        <div class="how__grid">
+          <div class="how__copy">
+            <p class="eyebrow" data-reveal>Comment ça marche</p>
+            <h2 class="display" data-split>Commander,<br />c’est <em>simple</em><br />comme bonjour.</h2>
+            <ol class="steps" id="steps">
+              <li class="step is-active" data-step="0">
+                <span class="step__n">01</span>
+                <div><h3>Trouvez votre bonheur</h3><p>Parcourez les restaurants, fast-foods et pâtisseries de votre ville, filtrez selon votre envie et composez votre panier en quelques gestes.</p></div>
+              </li>
+              <li class="step" data-step="1">
+                <span class="step__n">02</span>
+                <div><h3>Payez comme vous voulez</h3><p>Wave, Orange Money ou espèces à la livraison. Le total, frais de livraison compris, s’affiche avant de valider : aucune surprise.</p></div>
+              </li>
+              <li class="step" data-step="2">
+                <span class="step__n">03</span>
+                <div><h3>Suivez en direct</h3><p>Le restaurant prépare, un livreur récupère votre commande, et vous suivez chaque étape sur la carte, en temps réel.</p></div>
+              </li>
+              <li class="step" data-step="3">
+                <span class="step__n">04</span>
+                <div><h3>Recevez en toute sécurité</h3><p>Votre livreur arrive, vous lui donnez votre code de remise. Sans ce code, la commande ne peut être remise à personne d’autre que vous.</p></div>
+              </li>
+            </ol>
+            <div class="progress" aria-hidden="true"><i id="progressBar"></i></div>
+          </div>
+
+          <div class="how__stage">
+            <div class="how__halo" aria-hidden="true"></div>
+            <div class="phone phone--how">
+              <div class="phone__frame">
+                <div class="phone__island"></div>
+                <div class="phone__screen phone__screen--stack" id="howScreens">
+                  <div class="screen is-on" data-screen="0" data-clone="s-pick"></div>
+                  <div class="screen" data-screen="1" data-clone="s-pay"></div>
+                  <div class="screen" data-screen="2" data-clone="s-track"></div>
+                  <div class="screen" data-screen="3" data-clone="s-gate"></div>
+                </div>
+                <div class="phone__glare"></div>
+              </div>
+            </div>
+            <p class="how__note">Interface à titre d’illustration</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- THE APPS -->
+    <section class="apps" id="apps">
+      <div class="wrap">
+        <p class="eyebrow eyebrow--light" data-reveal>Trois applis, un seul service</p>
+        <h2 class="display display--light" data-split>Une envie.<br />Un restaurant. <span class="y">Un livreur.</span></h2>
+
+        <div class="cards">
+          <article class="card" data-tilt>
+            <div class="card__spot"></div>
+            <div class="card__art card__art--customer" aria-hidden="true">
+              <div class="mini mini--a"><i></i><i></i><i></i></div>
+              <div class="mini mini--b"></div>
+            </div>
+            <p class="card__tag">Pour vous</p>
+            <h3>Affia Foods</h3>
+            <p>L’appli client : tous les restaurants de votre ville au même endroit, un panier en quelques gestes, le suivi de votre livreur en direct et un code de remise pour chaque commande.</p>
+            <div class="card__cta"><button class="btn btn--yellow" type="button" data-download="Affia Foods"><span>Télécharger l’appli</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 11l5 5 5-5M5 20h14" /></svg></button></div>
+          </article>
+
+          <article class="card card--yellow" data-tilt>
+            <div class="card__spot"></div>
+            <div class="card__art card__art--vendor" aria-hidden="true">
+              <div class="ticket"><b>NOUVELLE</b><span></span><span></span></div>
+              <div class="ticket ticket--2"><b>EN CUISINE</b><span></span><span></span></div>
+              <div class="ticket ticket--3"><b>PRÊTE</b><span></span><span></span></div>
+            </div>
+            <p class="card__tag">Pour les restaurants</p>
+            <h3>Affia Partenaire</h3>
+            <p>Recevez les commandes en temps réel, acceptez, préparez, marquez prête : le livreur est prévenu aussitôt. Vous gardez la main sur votre menu, vos prix et vos horaires.</p>
+            <div class="card__cta"><button class="btn btn--dark" type="button" data-download="Affia Partenaire"><span>Télécharger l’appli</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 11l5 5 5-5M5 20h14" /></svg></button></div>
+          </article>
+
+          <article class="card" data-tilt>
+            <div class="card__spot"></div>
+            <div class="card__art card__art--driver" aria-hidden="true">
+              <svg viewBox="0 0 220 120"><path class="route" d="M10 100Q50 20 100 70T210 20" /><circle class="rider" r="7" /></svg>
+            </div>
+            <p class="card__tag">Pour les livreurs</p>
+            <h3>Affia Livreur</h3>
+            <p>Recevez vos courses, rejoignez le restaurant puis le client, et confirmez chaque remise avec le code du client. Une appli claire, pensée pour s’utiliser d’une seule main.</p>
+            <div class="card__cta"><button class="btn btn--yellow" type="button" data-download="Affia Livreur"><span>Télécharger l’appli</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 11l5 5 5-5M5 20h14" /></svg></button></div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- WHY (bento) -->
+    <section class="campus" id="why">
+      <div class="wrap">
+        <p class="eyebrow" data-reveal>Pourquoi Affia Foods</p>
+        <h2 class="display" data-split>Pensé pour le Sénégal,<br />fait pour vous.</h2>
+
+        <div class="bento">
+          <div class="tile tile--wide tile--green" data-reveal>
+            <h3>Chaque étape, en temps réel.</h3>
+            <p>Client, restaurant et livreur voient le même statut au même moment. Plus besoin d’appeler pour savoir où en est votre commande.</p>
+            <div class="rail" id="rail">
+              <span style="--c:#F5A524">Reçue</span>
+              <span style="--c:#14B8A6">Acceptée</span>
+              <span style="--c:#F97316">En cuisine</span>
+              <span style="--c:#84CC16">Prête</span>
+              <span style="--c:#3B82F6">En route</span>
+              <span style="--c:#8B5CF6">Arrivée</span>
+              <span style="--c:#16A34A">Livrée</span>
+            </div>
+          </div>
+
+          <div class="tile tile--yellow" data-reveal>
+            <h3>Un code de remise unique</h3>
+            <p>Sans votre code, pas de remise. Votre commande ne va qu’à vous.</p>
+            <div class="otp" aria-hidden="true"><span>•</span><span>•</span><span>•</span><span>•</span></div>
+          </div>
+
+          <div class="tile tile--cream" data-reveal>
+            <h3>Thiès d’abord, puis tout le Sénégal</h3>
+            <p>Nous lançons à Thiès, puis nous ouvrons d’autres villes, une à une.</p>
+            <div class="blocks" aria-hidden="true"><i>Thiès</i><i>Dakar</i><i>Mbour</i><i>Saint-Louis</i></div>
+          </div>
+
+          <div class="tile tile--dark" data-reveal>
+            <h3>Un avatar, pas de selfie</h3>
+            <p>Choisissez votre avatar parmi quinze créatures. Nous ne stockons aucune photo de vous.</p>
+            <div class="avatars" aria-hidden="true">
+              <i style="--h:140"></i><i style="--h:52"></i><i style="--h:265"></i><i style="--h:18"></i><i style="--h:190"></i><i style="--h:320"></i><i style="--h:96"></i><i style="--h:230"></i>
+            </div>
+          </div>
+
+          <div class="tile tile--wide tile--line" data-reveal>
+            <h3>Payez à votre façon</h3>
+            <ul class="ticks">
+              <li>Wave et Orange Money</li>
+              <li>Espèces à la livraison</li>
+              <li>Total affiché avant de valider, sans frais cachés</li>
+              <li>Vos codes de paiement ne sont jamais stockés chez nous</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- JOIN: partners and riders -->
+    <section class="join" id="join">
+      <div class="wrap">
+        <p class="eyebrow eyebrow--light" data-reveal>Rejoignez Affia Foods</p>
+        <h2 class="display display--light" data-split>Grandissons<br /><span class="y">ensemble.</span></h2>
+
+        <div class="join__grid">
+          <article class="join__card join__card--partner" data-reveal>
+            <p class="join__tag">Restaurants &amp; commerces</p>
+            <h3>Devenez partenaire</h3>
+            <p class="join__lead">Faites découvrir votre cuisine à toute votre ville, sans investir dans votre propre équipe de livraison.</p>
+            <ul class="join__list">
+              <li>De nouveaux clients chaque jour, sans effort marketing</li>
+              <li>Une appli simple pour gérer vos commandes en temps réel</li>
+              <li>Vous fixez votre menu, vos prix et vos horaires</li>
+              <li>Nos livreurs s’occupent du dernier kilomètre</li>
+              <li>Des versements réguliers et un suivi clair de vos ventes</li>
+            </ul>
+            <ol class="join__steps">
+              <li><b>1</b>Vous vous inscrivez dans l’appli</li>
+              <li><b>2</b>Notre équipe valide votre restaurant</li>
+              <li><b>3</b>Vos premières commandes arrivent</li>
+            </ol>
+            <a class="btn btn--dark btn--lg" href="/partenaire" data-magnetic><span>Devenir partenaire</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg></a>
+          </article>
+
+          <article class="join__card join__card--rider" data-reveal>
+            <p class="join__tag">Livreurs</p>
+            <h3>Livrez avec nous</h3>
+            <p class="join__lead">Gagnez de l’argent en livrant dans votre ville, à votre rythme, avec une moto, un scooter ou un vélo.</p>
+            <ul class="join__list">
+              <li>Des horaires flexibles : vous choisissez quand vous êtes en service</li>
+              <li>Des courses courtes, dans votre ville</li>
+              <li>Une appli claire : itinéraire, client et code de remise</li>
+              <li>Vos gains suivis dans l’appli et versés régulièrement</li>
+              <li>Une équipe locale joignable en cas de souci</li>
+            </ul>
+            <ol class="join__steps">
+              <li><b>1</b>Vous vous inscrivez dans l’appli</li>
+              <li><b>2</b>Vérification et courte formation</li>
+              <li><b>3</b>Vos premières courses</li>
+            </ol>
+            <a class="btn btn--yellow btn--lg" href="/livreur" data-magnetic><span>Postuler comme livreur</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg></a>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section class="faq" id="faq">
+      <div class="wrap faq__grid">
+        <div>
+          <p class="eyebrow" data-reveal>Questions fréquentes</p>
+          <h2 class="display" data-split>On vous<br />répond.</h2>
+        </div>
+        <div class="acc" id="acc">
+          <details class="acc__item" open>
+            <summary><span>Où Affia Foods est-il disponible ?</span><i></i></summary>
+            <p>Nous lançons à Thiès, puis nous ouvrirons d’autres villes du Sénégal, une à une. Les zones couvertes s’afficheront toujours dans l’appli.</p>
+          </details>
+          <details class="acc__item">
+            <summary><span>Quand puis-je commander ?</span><i></i></summary>
+            <p>Très bientôt. Nous préférons lancer correctement plutôt que trop tôt : il n’y a pas encore de date officielle. Cette page sera mise à jour dès que les applis seront disponibles.</p>
+          </details>
+          <details class="acc__item">
+            <summary><span>Comment puis-je payer ?</span><i></i></summary>
+            <p>Par Wave, Orange Money ou en espèces à la livraison, selon les options affichées dans l’appli. Nous ne voyons ni ne stockons jamais vos codes de paiement.</p>
+          </details>
+          <details class="acc__item">
+            <summary><span>Combien coûte la livraison ?</span><i></i></summary>
+            <p>Les frais de livraison s’affichent clairement avant que vous validiez votre commande. Le prix que vous voyez est le prix que vous payez, sans frais cachés.</p>
+          </details>
+          <details class="acc__item">
+            <summary><span>J’ai un restaurant. Comment devenir partenaire ?</span><i></i></summary>
+            <p>Téléchargez l’appli Affia Partenaire, créez votre compte et ajoutez votre restaurant. Notre équipe vérifie votre dossier puis valide votre restaurant. Tous les détails sur la page <a href="/partenaire">Devenir partenaire</a>.</p>
+          </details>
+          <details class="acc__item">
+            <summary><span>Comment devenir livreur ?</span><i></i></summary>
+            <p>Téléchargez l’appli Affia Livreur et créez votre compte avec votre téléphone et votre moyen de déplacement (moto, scooter ou vélo). Notre équipe vérifie votre dossier avant vos premières courses. Tous les détails sur la page <a href="/livreur">Devenir livreur</a>.</p>
+          </details>
+          <details class="acc__item">
+            <summary><span>Ma commande a un problème. Que faire ?</span><i></i></summary>
+            <p>Contactez notre service client avec votre numéro de commande. Selon le cas, nous remboursons les articles concernés. Tous les détails sont dans notre <a href="/refunds">politique de remboursement</a>.</p>
+          </details>
+          <details class="acc__item">
+            <summary><span>Puis-je supprimer mes données ?</span><i></i></summary>
+            <p>Oui, directement depuis l’appli. Lisez précisément ce que nous collectons et conservons sur la <a href="/privacy">page de confidentialité</a>.</p>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="cta" id="launch">
+      <div class="cta__inner">
+        <svg class="cta__mark" viewBox="0 0 200 150" aria-hidden="true"><use href="#kmark" /></svg>
+        <h2 class="cta__title" data-split>Bientôt<br />près de chez vous.</h2>
+        <p class="cta__sub" data-reveal>Restaurateur, livreur ou simplement gourmand ? Écrivez-nous, on vous répond rapidement.</p>
+        <div class="cta__actions" data-reveal>
+          <a class="btn btn--dark btn--lg" href="mailto:support@affiafoods.com" data-magnetic><span>support@affiafoods.com</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg></a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <div class="foot__word" id="footWord" aria-hidden="true">AFFIA FOODS</div>
+    <div class="foot__bar">
+      <p>© 2026 Affia Foods · Fait au Sénégal · Propulsé par <b>DakSec Consulting</b></p>
+      <nav aria-label="Mentions légales"><a href="/privacy">Confidentialité</a><a href="/terms">Conditions</a><a href="/refunds">Remboursements</a><a href="/contact">Contact</a></nav>
+    </div>
+  </footer>
+
+
+  <dialog class="jp-modal" id="downloadModal" aria-labelledby="dlTitle">
+    <div class="jp-modal__panel">
+      <button class="jp-modal__x" type="button" data-close aria-label="Fermer">×</button>
+      <svg class="jp-modal__mark" viewBox="0 0 200 150" aria-hidden="true"><use href="#kmark" /></svg>
+      <p class="jp-modal__tag">Téléchargement</p>
+      <h2 id="dlTitle">Télécharger <span id="dlApp">l’appli</span></h2>
+      <p>L’application <b id="dlAppB">Affia Foods</b> arrive bientôt sur Android et iPhone. Elle sera disponible ici, sur Google Play et sur l’App Store, dès son lancement à Thiès.</p>
+      <div class="jp-stores">
+        <span class="jp-store" aria-disabled="true"><small>Bientôt sur</small>Google Play</span>
+        <span class="jp-store" aria-disabled="true"><small>Bientôt sur</small>App Store</span>
+      </div>
+      <p class="jp-modal__help">Une question ? Écrivez-nous à <a href="mailto:support@affiafoods.com">support@affiafoods.com</a>.</p>
+      <button class="btn btn--dark jp-modal__ok" type="button" data-close><span>J’ai compris</span></button>
+    </div>
+  </dialog>
+
+  <!-- Phone screens (cloned into phones by JS) -->
+  <template id="s-pick">
+    <div class="ui ui--pick">
+      <div class="ui__bar"><span class="ui__loc"><b>Livrer à</b>Randoulène ▾</span><span class="ui__av"></span></div>
+      <div class="ui__search">Restaurant, plat, envie…</div>
+      <div class="ui__chips"><i class="on">Tout</i><i>Grillades</i><i>Fast-food</i><i>Jus</i></div>
+      <div class="ui__cardr"><div class="ui__img ui__img--a"></div><div class="ui__meta"><b>Chez Fatou</b><span>Grillades · Dibi</span></div><em>Ouvert</em></div>
+      <div class="ui__cardr"><div class="ui__img ui__img--b"></div><div class="ui__meta"><b>Baobab Burger</b><span>Burgers · Frites</span></div><em>Ouvert</em></div>
+      <div class="ui__cardr"><div class="ui__img ui__img--c"></div><div class="ui__meta"><b>Teranga Express</b><span>Cuisine sénégalaise</span></div><em>Ouvert</em></div>
+      <div class="ui__dock"><i class="on"></i><i></i><i></i><i></i></div>
+    </div>
+  </template>
+
+  <template id="s-pay">
+    <div class="ui ui--pay">
+      <div class="ui__title">Votre commande</div>
+      <div class="ui__line"><span>2 × Sandwich poulet</span><b>3 000 FCFA</b></div>
+      <div class="ui__line"><span>1 × Jus de bissap</span><b>500 FCFA</b></div>
+      <div class="ui__line ui__line--muted"><span>Livraison</span><b>500 FCFA</b></div>
+      <div class="ui__sum"><span>Total</span><b>4 000 FCFA</b></div>
+      <div class="ui__upi"><i>Wave</i><span>Payer avec Wave</span></div>
+      <div class="ui__slide"><span class="ui__knob"></span><em>Glisser pour payer</em></div>
+    </div>
+  </template>
+
+  <template id="s-track">
+    <div class="ui ui--track">
+      <div class="ui__map">
+        <svg viewBox="0 0 240 300" preserveAspectRatio="xMidYMid slice">
+          <path class="g" d="M0 60H240M0 130H240M0 200H240M0 270H240M50 0V300M120 0V300M190 0V300" />
+          <path class="r" d="M30 270Q30 200 100 190T180 110T200 40" />
+          <circle class="h" cx="200" cy="40" r="9" />
+          <circle class="k" cx="30" cy="270" r="9" />
+          <circle class="d" r="8" />
+        </svg>
+      </div>
+      <div class="ui__sheet">
+        <span class="ui__status">En route</span>
+        <b>Votre livreur arrive</b>
+        <div class="ui__bars"><i class="on"></i><i class="on"></i><i class="on"></i><i></i></div>
+      </div>
+    </div>
+  </template>
+
+  <template id="s-gate">
+    <div class="ui ui--gate">
+      <span class="ui__status ui__status--gate">Arrivé chez vous</span>
+      <b class="ui__big">Votre livreur est arrivé</b>
+      <div class="ui__code"><i>7</i><i>3</i><i>1</i><i>9</i></div>
+      <p>Donnez ce code à votre livreur, uniquement à la remise.</p>
+      <div class="ui__ok">Livrée ✓</div>
+    </div>
+  </template>
+</body>
+</html>
