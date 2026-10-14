@@ -1,0 +1,557 @@
+// Prisma Schema for Kraveo Campus Food Delivery Platform
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  STUDENT
+  VENDOR
+  DRIVER
+  ADMIN
+}
+
+enum OrderStatus {
+  PLACED
+  ACCEPTED
+  PREPARING
+  READY_FOR_PICKUP
+  PICKED_UP
+  ARRIVED_AT_GATE
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+// Dish approval (Docs/21 section 2). Separate from ApprovalStatus (partners) so a dish can never be "SUSPENDED".
+enum MenuApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum DutyStatus {
+  ONLINE
+  OFFLINE
+  IN_TRANSIT
+}
+
+model User {
+  id           String   @id @default(uuid())
+  phone        String?  @unique
+  email        String?  @unique
+  googleSub    String?  @unique
+  passwordHash String?
+  avatarId     Int?
+  isStudent    Boolean?
+  name         String
+  role         Role     @default(STUDENT)
+  hostelBlock  String?
+  kraveoCoins  Int      @default(0)
+  upiId        String?
+  fcmToken     String?
+  // Bumped on password reset, suspension and account deletion: JWTs carry `tv` and are refused when it differs.
+  tokenVersion Int      @default(0)
+  // Set when the student deletes the account (row is anonymised, kept for order/payment FKs).
+  deletedAt    DateTime?
+  // How many times 50 coins were exchanged for the KRAVEO20 coupon (each redemption = one use of the code).
+  kraveo20Redeemed Int  @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  ordersPlaced    Order[]        @relation("CustomerOrders")
+  groupsPlaced    OrderGroup[]   @relation("CustomerGroups")
+  ordersDriven    Order[]        @relation("DriverOrders")
+  driverProfile   DriverPartner?
+  vendorsOwned    Vendor[]
+  reviewsGiven    ReviewRecord[] @relation("CustomerReviews")
+  reviewsReceived ReviewRecord[] @relation("DriverReviews")
+  deviceTokens    DeviceToken[]
+  payoutAccount   PayoutAccount?
+}
+
+model Vendor {
+  id                String   @id @default(uuid())
+  userId            String?
+  name              String
+  category          String
+  rating            Float    @default(4.5)
+  totalRatingsCount Int      @default(50)
+  eta               String   @default("20-25 min")
+  bannerImage       String
+  // Docs/24: the restaurant's public profile. All optional; null = not filled in yet.
+  logoUrl           String?
+  description       String?
+  phone             String?
+  // { mon: [{open:"08:00",close:"14:00"}, ...], tue: [...], ... } in Africa/Dakar time. A missing day = closed; null = never set.
+  openingHours      Json?
+  // Docs/24: what a rider should know to find / enter the restaurant ("back door", "2nd floor"). Shown to the restaurant and the admin.
+  pickupNotes       String?
+  address           String
+  isAcceptingOrders Boolean  @default(true)
+  lat               Float    @default(14.7886)
+  lng               Float    @default(-16.926)
+  // Where the pin came from (Docs/20): DEVICE = the restaurant's own phone, ADMIN = typed by Kraveo, null = never set / legacy.
+  locationSource    String?
+  locationSetAt     DateTime?
+  locationAccuracyM Float?
+  // Partner approval: rows created by Kraveo are APPROVED; self sign-ups start PENDING.
+  approvalStatus    ApprovalStatus @default(APPROVED)
+  rejectionReason   String?
+  fssaiNumber       String?
+  appliedAt         DateTime?
+  reviewedAt        DateTime?
+  // Docs/21: this restaurant's default commission (PERCENT | FLAT). Both null = inherit the global default.
+  commissionType    String?
+  commissionValue   Float?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user      User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  menuItems MenuItem[]
+  orders    Order[]
+  reviews   ReviewRecord[]
+  settlements Settlement[]
+
+  @@index([approvalStatus])
+}
+
+model MenuItem {
+  id          String   @id @default(uuid())
+  vendorId    String
+  name        String
+  // The CUSTOMER price (what the apps and the cart read). The restaurant's own price is `vendorPrice`.
+  price       Float
+  category    String
+  description String
+  imageUrl    String
+  isAvailable Boolean  @default(true)
+  isVeg       Boolean  @default(true)
+  rating      Float?   @default(4.5)
+  ratingCount Int?     @default(0)
+  createdAt   DateTime @default(now())
+
+  // Pricing and catalog approval (Docs/21 sections 2-4). `price` = roundUp(vendorPrice + commission, step), recomputed on every change.
+  // No default on vendorPrice on purpose: a writer that forgets it fails loudly instead of paying a restaurant Rs 0.
+  vendorPrice        Float
+  // Dish-level commission override (PERCENT | FLAT). Both null = inherit the restaurant's, then the global default.
+  commissionType     String?
+  commissionValue    Float?
+  approvalStatus     MenuApprovalStatus @default(APPROVED)
+  // PENDING dish rejected: why. On a LIVE dish: why the last price-change request was declined.
+  rejectionReason    String?
+  // A price change the restaurant asked for on a LIVE dish; the dish keeps selling at the old price until an admin accepts it.
+  pendingVendorPrice Float?
+  // Soft delete: hidden from customers and restaurants, kept so old orders keep their copies.
+  deletedAt          DateTime?
+  reviewedAt         DateTime?
+  reviewedByUserId   String?
+  createdBy          String             @default("VENDOR") // VENDOR | ADMIN
+  updatedAt          DateTime           @default(now()) @updatedAt
+
+  vendor     Vendor      @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  orderItems OrderItem[]
+
+  @@index([vendorId, approvalStatus, deletedAt])
+  @@index([approvalStatus, deletedAt])
+}
+
+model Order {
+  id            String        @id @default(uuid())
+  customerId    String
+  vendorId      String
+  driverId      String?
+  totalAmount   Float
+  deliveryFee   Float         @default(30.0)
+  dropoffHostel String
+  dropoffNotes  String?
+  status        OrderStatus   @default(PLACED)
+  paymentStatus PaymentStatus @default(PENDING)
+  otpCode       String?
+  isReviewed    Boolean       @default(false)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  // Order flow v1 (Docs/16_order_flow_contract.md). Price parts are stored so history never changes.
+  subtotal         Float     @default(0)
+  taxAndPackaging  Float     @default(0)
+  discount         Float     @default(0)
+  // The coupon that produced `discount` (normalised, upper case). A code is single use per customer
+  // while a non-CANCELLED order holds it; cancelling releases it.
+  couponCode       String?
+  // Idempotency key made by the app per checkout attempt (unique per customer).
+  clientRequestId  String?
+  paidAt           DateTime?
+  acceptedAt       DateTime?
+  pickedUpAt       DateTime?
+  deliveredAt      DateTime?
+  cancelledAt      DateTime?
+  cancelledBy      String? // CUSTOMER | VENDOR | ADMIN | SYSTEM
+  cancelReason     String?
+  // Gate OTP brute-force guard: 5 wrong attempts lock the order until an admin unlocks it.
+  otpAttempts      Int       @default(0)
+  otpLocked        Boolean   @default(false)
+  // HMAC of (orderId, code) written at delivery: lets a rider's retry of the SAME code answer "already delivered"
+  // while a wrong code on a delivered order is refused. The plain code is never kept (otpCode = 'USED').
+  otpProof         String?
+  // Refund bookkeeping: null/NONE | PENDING | DONE | FAILED. The lease stops two workers refunding at once.
+  refundStatus     String?
+  refundError      String?
+  refundAttempts   Int       @default(0)
+  refundLeaseUntil DateTime?
+
+  // Docs/21 section 2. `deliveryFee` now holds the ONE all-in fee and `taxAndPackaging` stays 0 for new orders.
+  // vendorSubtotal = sum(vendorUnitPrice x qty) (what the restaurant earns), commissionTotal = subtotal - vendorSubtotal.
+  vendorSubtotal   Float     @default(0)
+  commissionTotal  Float     @default(0)
+  feeBreakdown     Json?
+  // Docs/21 phase 2: the daily settlement batch this order was paid out in (null = not settled yet). An order belongs to at most
+  // one settlement (set by a conditional update); deleting a settlement row frees its orders (ON DELETE SET NULL).
+  settlementId     String?
+
+  // Docs/22 multi-restaurant orders: every child of an OrderGroup is an ordinary order. groupIndex 0 = the PRIMARY child: it carries the
+  // one Payment (amount = the group total), the base fee and the coupon code. groupId is immutable once set; groups are never deleted.
+  groupId          String?
+  groupIndex       Int?
+
+  customer User          @relation("CustomerOrders", fields: [customerId], references: [id])
+  vendor   Vendor        @relation(fields: [vendorId], references: [id])
+  driver   User?         @relation("DriverOrders", fields: [driverId], references: [id])
+  settlement Settlement? @relation(fields: [settlementId], references: [id], onDelete: SetNull)
+  group    OrderGroup?   @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  items    OrderItem[]
+  payments Payment[]
+  review   ReviewRecord?
+
+  @@unique([customerId, clientRequestId])
+  @@unique([groupId, groupIndex])
+  @@index([groupId])
+  @@index([customerId, createdAt])
+  @@index([customerId, couponCode])
+  @@index([vendorId, status])
+  @@index([driverId, status])
+  @@index([status, createdAt])
+  @@index([status, driverId, paymentStatus])
+  @@index([paymentStatus, createdAt])
+  @@index([refundStatus])
+  @@index([settlementId])
+  @@index([status, deliveredAt])
+}
+
+/// Docs/22: one checkout, one payment, one rider, one gate handover for several restaurants. The children (Order rows) are normal orders.
+model OrderGroup {
+  id              String   @id @default(uuid())
+  customerId      String
+  // The app's checkout id (unique per customer); the children use the derived ids `g:<clientRequestId>:<index>`.
+  clientRequestId String
+  dropoffHostel   String
+  dropoffNotes    String?
+  couponCode      String?
+  discount        Float    @default(0)
+  // Food (customer prices), all fees, and what the customer pays (= subtotal + feeTotal - discount = the sum of the children's totalAmount).
+  subtotal        Float
+  feeTotal        Float
+  totalAmount     Float
+  restaurantCount Int
+  feeBreakdown    Json?
+  createdAt       DateTime @default(now())
+
+  customer User    @relation("CustomerGroups", fields: [customerId], references: [id])
+  orders   Order[]
+
+  @@unique([customerId, clientRequestId])
+  @@index([customerId, createdAt])
+}
+
+model OrderItem {
+  id         String  @id @default(uuid())
+  orderId    String
+  menuItemId String?
+  name       String
+  quantity   Int
+  // The CUSTOMER unit price at order time.
+  price      Float
+  // Snapshots from the dish at order time (Docs/21): what the restaurant earns per unit and what Kraveo keeps per unit.
+  vendorUnitPrice Float @default(0)
+  commissionUnit  Float @default(0)
+
+  order    Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItem MenuItem? @relation(fields: [menuItemId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+}
+
+model Payment {
+  id                String        @id @default(uuid())
+  orderId           String
+  razorpayOrderId   String        @unique
+  razorpayPaymentId String?
+  amount            Float
+  status            PaymentStatus @default(PENDING)
+  createdAt         DateTime      @default(now())
+  // What Razorpay says was captured (paise), the refund that returned it, and when.
+  capturedAmountPaise Int?
+  // WAVE | ORANGE_MONEY | CASH (null for a payment made through a provider checkout)
+  method              String?
+  razorpayRefundId    String?
+  refundedAt          DateTime?
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
+
+model DriverPartner {
+  id                       String     @id @default(uuid())
+  userId                   String?    @unique
+  name                     String
+  phone                    String
+  studentRegNo             String?
+  runnerCode               String     @unique
+  avatarUrl                String?
+  vehicleType              String
+  vehicleRegNo             String?
+  emergencyPhone           String?
+  dutyStatus               DutyStatus @default(OFFLINE)
+  ordersToday              Int        @default(0)
+  totalEarningsToday       Float      @default(0.0)
+  avgCompletionTimeMinutes Float      @default(0.0)
+  onTimeRatePercent        Float      @default(100.0)
+  rating                   Float      @default(5.0)
+  upiId                    String?
+  approvalStatus           ApprovalStatus @default(APPROVED)
+  rejectionReason          String?
+  appliedAt                DateTime?
+  reviewedAt               DateTime?
+  createdAt                DateTime   @default(now())
+  updatedAt                DateTime   @updatedAt
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([approvalStatus])
+}
+
+// Who did what in the admin portal (approvals, suspensions, password resets, manual account creation).
+model AdminAuditLog {
+  id         String   @id @default(uuid())
+  action     String
+  targetType String
+  targetId   String
+  summary    String
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([targetType, targetId])
+}
+
+model ReviewRecord {
+  id           String   @id @default(uuid())
+  orderId      String   @unique
+  customerId   String
+  vendorId     String
+  driverId     String?
+  driverRating Float    @default(5.0)
+  driverTags   String[]
+  driverNotes  String?
+  dishReviews  Json
+  dhabaNotes   String?
+  coinsEarned  Int      @default(10)
+  createdAt    DateTime @default(now())
+
+  order    Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  customer User   @relation("CustomerReviews", fields: [customerId], references: [id], onDelete: Cascade)
+  vendor   Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  driver   User?  @relation("DriverReviews", fields: [driverId], references: [id], onDelete: SetNull)
+}
+
+model DriverLocation {
+  driverId    String   @id
+  driverName  String
+  lat         Float
+  lng         Float
+  heading     Float    @default(0)
+  lastUpdated DateTime @default(now())
+}
+
+// Push notifications (Docs/18_push_notifications_contract.md). One row per installed app that registered with FCM.
+// A token belongs to exactly one user at a time (it MOVES when another user signs in on the same phone).
+model DeviceToken {
+  id             String    @id @default(uuid())
+  userId         String
+  token          String    @unique
+  app            String // CUSTOMER | VENDOR | DRIVER
+  platform       String    @default("android")
+  appVersion     String?
+  createdAt      DateTime  @default(now())
+  lastSeenAt     DateTime  @default(now())
+  disabledAt     DateTime?
+  disabledReason String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, disabledAt])
+}
+
+// One row per (order, event, user): the idempotency key AND the delivery log. No foreign keys on purpose, so orders and
+// users can be removed without touching it; the maintenance job prunes rows after 14 days. lastError is a code only.
+model PushLog {
+  id            String    @id @default(uuid())
+  key           String    @unique // `${orderId}:${event}:${userId}`
+  orderId       String
+  userId        String
+  event         String
+  status        String // PENDING | SENT | FAILED | SKIPPED
+  attempts      Int       @default(0)
+  lastError     String?
+  nextAttemptAt DateTime?
+  createdAt     DateTime  @default(now())
+  sentAt        DateTime?
+
+  @@index([status, nextAttemptAt])
+  @@index([createdAt])
+}
+
+// Admin-editable settings, one row per group (fees, commission, rounding, settlement), validated on write (Docs/21 section 2).
+// A group with no row uses the defaults in src/services/pricing.ts. Every write is audited (old and new value).
+model AppSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @default(now()) @updatedAt
+  updatedBy String?
+}
+
+enum SettlementStatus {
+  PENDING
+  ON_HOLD
+  PAID
+  CANCELLED
+}
+
+// Docs/21 section 2 (phase 2). Where a restaurant or rider is paid. One row per user. The full bank account number is only ever
+// stored encrypted (AES-256-GCM, src/services/payoutCrypto.ts); every API answer carries `accountLast4` only, except the one
+// audited admin "reveal" endpoint.
+model PayoutAccount {
+  id               String    @id @default(uuid())
+  userId           String    @unique
+  partnerType      String // VENDOR | DRIVER
+  method           String // UPI | BANK
+  upiId            String?
+  accountHolder    String?
+  accountNumberEnc String?
+  accountLast4     String?
+  ifsc             String?
+  bankName         String?
+  // Set by an admin once the details were checked (a test transfer, a name match). Any change of details clears it.
+  verifiedAt       DateTime?
+  verifiedBy       String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// One payout batch for one restaurant. `batchKey` is the IST date (YYYY-MM-DD) for the automatic daily batch, so the daily job can
+// never create two for the same restaurant and day; a manual "run now" uses a unique key (M-...). Money is Float rounded to 2
+// decimals (all sums are done in integer paise).
+model Settlement {
+  id               String           @id @default(uuid())
+  vendorId         String
+  batchKey         String
+  // The delivery window covered: first delivery in the batch .. the cut-off instant.
+  periodStart      DateTime
+  periodEnd        DateTime
+  status           SettlementStatus @default(PENDING)
+  orderCount       Int
+  // Customer food total of the orders (analytics only: never shown to the restaurant).
+  foodGross        Float
+  // What the restaurant earns: sum of Order.vendorSubtotal.
+  vendorAmount     Float
+  commissionAmount Float
+  adjustmentTotal  Float            @default(0)
+  // vendorAmount + adjustmentTotal: what Kraveo pays out.
+  netPayable       Float
+  // Payout method and MASKED destination at creation time (null = the restaurant had no payout details).
+  payoutSnapshot   Json?
+  paidAt           DateTime?
+  paymentReference String?
+  paidBy           String?
+  note             String?
+  createdBy        String // AUTO | admin user id
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @default(now()) @updatedAt
+
+  vendor      Vendor                 @relation(fields: [vendorId], references: [id])
+  orders      Order[]
+  adjustments SettlementAdjustment[]
+
+  @@unique([vendorId, batchKey])
+  @@index([status, createdAt])
+  @@index([vendorId, createdAt])
+  @@index([createdAt])
+}
+
+model SettlementAdjustment {
+  id           String   @id @default(uuid())
+  settlementId String
+  // Signed rupees: + pays the restaurant more, - deducts.
+  amount       Float
+  reason       String
+  // Optional client key: the same key twice on one settlement is the same adjustment (double click).
+  requestId    String?
+  createdBy    String
+  createdAt    DateTime @default(now())
+
+  settlement Settlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+
+  @@unique([settlementId, requestId])
+  @@index([settlementId])
+}
+
+// Ledger of what Kraveo paid a rider (riders are not settled daily: Kraveo only keeps the records).
+model RiderPayout {
+  id           String    @id @default(uuid())
+  driverUserId String
+  amount       Float
+  method       String // UPI | BANK | CASH
+  reference    String?
+  periodStart  DateTime?
+  periodEnd    DateTime?
+  note         String?
+  createdBy    String
+  createdAt    DateTime  @default(now())
+
+  @@unique([driverUserId, reference])
+  @@index([driverUserId, createdAt])
+  @@index([createdAt])
+}
+
+// Customer sign-in by phone: one row per code sent (services/phoneOtp.ts). Only a keyed hash of the code is stored.
+model PhoneOtp {
+  id         String    @id @default(uuid())
+  phone      String
+  codeHash   String
+  expiresAt  DateTime
+  attempts   Int       @default(0)
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([phone, createdAt])
+}

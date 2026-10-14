@@ -1,0 +1,36 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kraveo
+      POSTGRES_PASSWORD: kraveo
+      POSTGRES_DB: kraveo
+    ports:
+      - "5433:5432"   # base accessible depuis l'hôte : postgresql://kraveo:kraveo@localhost:5433/kraveo
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kraveo -d kraveo"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: development   # les paiements simulés sont refusés en production
+      DATABASE_URL: postgresql://kraveo:kraveo@db:5432/kraveo
+    ports:
+      - "5001:5000"   # 5000 est pris par AirPlay sur macOS
+    volumes:
+      - uploads:/app/public/uploads   # photos envoyées par les restaurants (Docs/24)
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  uploads:

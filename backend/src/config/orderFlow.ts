@@ -1,0 +1,54 @@
+/**
+ * Order flow constants (Docs/16_order_flow_contract.md). One place, env-overridable so tests and
+ * operations can change a window without a code change. Read at call time, never cached.
+ */
+const envNumber = (name: string, fallback: number): number => {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === '') return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+/** An unpaid order is cancelled by the server after this many minutes. */
+export const paymentWindowMin = () => envNumber('PAYMENT_WINDOW_MIN', 15);
+/** A paid order the restaurant has not accepted is cancelled (and refunded) after this many minutes. */
+export const vendorAcceptWindowMin = () => envNumber('VENDOR_ACCEPT_WINDOW_MIN', 10);
+
+export const MAX_UNPAID_OPEN_ORDERS = 3;
+export const MAX_ACTIVE_ORDERS_PER_RIDER = 1;
+export const OTP_MAX_ATTEMPTS = 5;
+/** `scope=active` also returns orders that finished this recently, so the app can show the final state. */
+export const RECENTLY_FINISHED_MIN = 10;
+export const POOL_LIMIT = 20;
+export const MAINTENANCE_INTERVAL_MS = 60_000;
+/**
+ * Automatic refund retries stop after this many PERMANENT failures (provider answered 4xx other than 429, or a
+ * local problem such as "no captured payment"). Network errors, timeouts, 5xx and 429 are transient: they do not
+ * count, they are retried with exponential backoff (REFUND_BACKOFF_*), and the order stays in needs-attention meanwhile.
+ */
+export const MAX_REFUND_ATTEMPTS = 3;
+/** A refund worker owns the order for this long; after that another worker (the job) may retry. */
+export const REFUND_LEASE_MS = 2 * 60_000;
+/** Transient refund failures wait 30 s, 1, 2, 4 ... minutes before the next automatic try, never more than an hour. */
+export const REFUND_BACKOFF_BASE_MS = 30_000;
+export const REFUND_BACKOFF_MAX_MS = 60 * 60_000;
+/** Provider calls (Razorpay) give up after this long so a hung request never blocks a worker forever. Env: PROVIDER_TIMEOUT_MS. */
+export const providerTimeoutMs = () => envNumber('PROVIDER_TIMEOUT_MS', 15_000);
+/** Maintenance tick: at most this many provider calls in flight, and the provider phase stops after this many transient failures in a row. */
+export const PROVIDER_CONCURRENCY = 5;
+export const PROVIDER_BREAKER_FAILURES = 3;
+/** Reconciliation (pull): unpaid Payment rows older than MIN_AGE and younger than MAX_AGE are asked about at Razorpay, at most BATCH per tick. */
+export const RECONCILE_MIN_AGE_MS = 2 * 60_000;
+export const RECONCILE_MAX_AGE_MS = 6 * 60 * 60_000;
+export const RECONCILE_BATCH = 20;
+/** GET /admin/payments/reconcile bounds. */
+export const ORPHAN_MAX_RANGE_MS = 7 * 24 * 60 * 60_000;
+export const ORPHAN_MAX_ROWS = 200;
+
+/** needs-attention thresholds (minutes). */
+export const READY_NO_RIDER_ALERT_MIN = 10;
+export const DELIVERY_STUCK_ALERT_MIN = 60;
+export const RIDER_PICKUP_ALERT_MIN = 15;
+export const REFUND_PENDING_ALERT_MIN = 5;
+
+// Campus drop points moved to ./campus.ts (Docs/19_campus_maps_contract.md): normalizeDropPoint() replaces the old regexes.

@@ -1,0 +1,115 @@
+/** Public (customer app) views of vendors and menu items, and validation of what restaurants may write to the menu. */
+
+export const MAX_MENU_PRICE = 100_000; // FCFA
+
+/**
+ * Customer-visible = approved AND not deleted (Docs/21 section 2). A sold-out dish is still visible (greyed out, as before).
+ * Rows without the new columns (old test fixtures, partial selects) count as visible only when both fields say so explicitly.
+ */
+export const isCustomerVisible = (m: { approvalStatus?: string | null; deletedAt?: Date | string | null }): boolean =>
+  m.approvalStatus === 'APPROVED' && (m.deletedAt === null || m.deletedAt === undefined);
+
+/** What a customer needs to see of a menu item: nothing internal. `price` is the customer price. */
+export const publicMenuItem = (m: any) => ({
+  id: m.id,
+  vendorId: m.vendorId,
+  name: m.name,
+  price: m.price,
+  category: m.category,
+  description: m.description,
+  imageUrl: m.imageUrl,
+  isAvailable: m.isAvailable,
+  isVeg: m.isVeg,
+  rating: m.rating ?? null,
+  ratingCount: m.ratingCount ?? null,
+});
+
+/** What a customer needs to see of a restaurant (no owner id, FSSAI number, review state or timestamps). */
+export const publicVendorView = (v: any) => ({
+  id: v.id,
+  name: v.name,
+  category: v.category,
+  rating: v.rating,
+  totalRatingsCount: v.totalRatingsCount,
+  eta: v.eta,
+  bannerImage: v.bannerImage,
+  // Docs/24: logo, description and opening hours are public; the contact phone is not.
+  logoUrl: v.logoUrl ?? null,
+  description: v.description ?? null,
+  openingHours: v.openingHours ?? null,
+  address: v.address,
+  isAcceptingOrders: v.isAcceptingOrders,
+  lat: v.lat,
+  lng: v.lng,
+  // Defence in depth: the queries already filter, an unapproved or deleted dish must never reach a customer even if one forgets to.
+  menuItems: (v.menuItems ?? []).filter(isCustomerVisible).map(publicMenuItem),
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Restaurant view of a dish (Docs/21 section 4): ITS price and a status. Never the customer price or the commission.
+// ---------------------------------------------------------------------------------------------------------------------
+export type DishStatus = 'PENDING' | 'LIVE' | 'REJECTED' | 'CHANGE_PENDING';
+
+export const dishStatus = (m: { approvalStatus: string; pendingVendorPrice?: number | null }): DishStatus => {
+  if (m.approvalStatus === 'PENDING') return 'PENDING';
+  if (m.approvalStatus === 'REJECTED') return 'REJECTED';
+  return m.pendingVendorPrice !== null && m.pendingVendorPrice !== undefined ? 'CHANGE_PENDING' : 'LIVE';
+};
+
+/**
+ * `price` is the restaurant's own price (the same field name the restaurant app always read), `pendingPrice` a requested change.
+ * `rejectionReason` is why a new dish was rejected, or (on a live dish) why the last price change was declined.
+ * Keeps the legacy fields (vendorId, rating, ratingCount, createdAt) so an old app that parses the full row still works.
+ */
+export const vendorMenuItemView = (m: any) => ({
+  id: m.id,
+  vendorId: m.vendorId,
+  name: m.name,
+  category: m.category,
+  description: m.description,
+  imageUrl: m.imageUrl,
+  isVeg: m.isVeg,
+  isAvailable: m.isAvailable,
+  price: m.vendorPrice,
+  ...(m.pendingVendorPrice !== null && m.pendingVendorPrice !== undefined ? { pendingPrice: m.pendingVendorPrice } : {}),
+  status: dishStatus(m),
+  ...(m.rejectionReason ? { rejectionReason: m.rejectionReason } : {}),
+  rating: m.rating ?? null,
+  ratingCount: m.ratingCount ?? null,
+  createdAt: m.createdAt instanceof Date ? m.createdAt.toISOString() : m.createdAt,
+});
+
+/** A price a restaurant may set: a finite JSON number, 0 < price <= 100000, a whole number of FCFA. */
+export const priceProblem = (price: unknown): string | null => {
+  if (typeof price !== 'number' || !Number.isFinite(price)) return 'Price must be a number.';
+  if (price <= 0) return 'Price must be more than 0.';
+  if (price > MAX_MENU_PRICE) return `Price cannot be more than ${MAX_MENU_PRICE} FCFA.`;
+  if (!Number.isInteger(price)) return 'Price must be a whole number of FCFA.';
+  return null;
+};
+
+export const text = (raw: unknown, max: number): string | null | false => {
+  if (raw === undefined || raw === null) return null;
+  if (typeof raw !== 'string') return false;
+  const s = raw.trim().replace(/\s+/g, ' ');
+  return s.length <= max ? s : false;
+};
+
+export type MenuItemInput = { name: string; price: number; category: string; description: string; imageUrl: string | null; isVeg: boolean };
+export type FieldProblem = { field: string; message: string };
+
+/** Validates the body of POST /vendors/:id/items. */
+export const validateMenuItemFields = (b: any): { ok: true; data: MenuItemInput } | { ok: false; error: FieldProblem } => {
+  const name = text(b?.name, 80);
+  if (!name) return { ok: false, error: { field: 'name', message: 'Item name is required (up to 80 characters).' } };
+  const price = priceProblem(b?.price);
+  if (price) return { ok: false, error: { field: 'price', message: price } };
+  const category = text(b?.category, 40);
+  if (category === false) return { ok: false, error: { field: 'category', message: 'Category can be at most 40 characters.' } };
+  const description = text(b?.description, 300);
+  if (description === false) return { ok: false, error: { field: 'description', message: 'Description can be at most 300 characters.' } };
+  const imageUrl = text(b?.imageUrl, 500);
+  if (imageUrl === false || (imageUrl && !/^https?:\/\//i.test(imageUrl))) return { ok: false, error: { field: 'imageUrl', message: 'Image must be an http(s) link (up to 500 characters).' } };
+  if (b?.isVeg !== undefined && typeof b.isVeg !== 'boolean') return { ok: false, error: { field: 'isVeg', message: 'isVeg must be true or false.' } };
+  return { ok: true, data: { name, price: b.price, category: category || 'Main Course', description: description || '', imageUrl: imageUrl || null, isVeg: b?.isVeg !== false } };
+};

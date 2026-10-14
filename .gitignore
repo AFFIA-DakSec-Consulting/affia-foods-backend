@@ -1,0 +1,56 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build artifacts
+dist/
+build/
+.dart_tool/
+.pub-cache/
+.pub/
+*.apk
+*.aab
+
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+firebase-key.json
+*firebase-adminsdk*.json
+*.pem
+*.key
+
+# IDE & OS
+.DS_Store
+.idea/
+*.iml
+*.log
+*.tmp
+
+# Cloud credentials and key downloads - never commit
+*_access_Keys*.csv
+*accessKeys*.csv
+*access_keys*.csv
+rootkey.csv
+*credentials*.csv
+.aws/
+*.key
+*.p12
+*.pfx
+
+# Exported chat transcripts (contain pasted secrets)
+ANTIGRAVITY_FULL_CHAT_TRANSCRIPT.md
+KRAVEO_CHATGPT_CODEX_FULL_CHAT_TRANSCRIPT.md
+*FULL_CHAT_TRANSCRIPT*.md
+
+# Local credential notes (never commit)
+*.local.md
+*.local.txt
+DEMO_ACCOUNTS*
+
+# Fichiers envoyés par les restaurants (stockés sur un volume en production)
+public/uploads/
+
+# Netlify / Vercel (dossiers locaux)
+.netlify/
+.vercel/
