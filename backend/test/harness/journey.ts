@@ -32,7 +32,7 @@ export interface Vendor extends Person { vendorId: string; items: { id: string; 
 export interface Rider extends Person { profileId: string }
 export interface World { prefix: string; customers: Customer[]; vendors: Vendor[]; riders: Rider[]; admin: Person }
 
-const ROLE_DIGIT: Record<string, string> = { STUDENT: '1', VENDOR: '2', DRIVER: '3', ADMIN: '4' };
+const ROLE_DIGIT: Record<string, string> = { CLIENT: '1', VENDOR: '2', DRIVER: '3', ADMIN: '4' };
 
 export const purgeWorld = async (prefix: string) => {
   const p = `${prefix}-`;
@@ -58,8 +58,8 @@ export const createWorld = async (prefix: string, digit: string, size: { custome
   await prisma.user.create({ data: { id: world.admin.id, phone: world.admin.phone, name: world.admin.name, role: Role.ADMIN } });
 
   for (let i = 1; i <= size.customers; i++) {
-    const c = person(Role.STUDENT, 'cust', i, `Cust${i} Tester`);
-    await prisma.user.create({ data: { id: c.id, phone: c.phone, name: c.name, role: Role.STUDENT, hostelBlock: 'Randoulène' } });
+    const c = person(Role.CLIENT, 'cust', i, `Cust${i} Tester`);
+    await prisma.user.create({ data: { id: c.id, phone: c.phone, name: c.name, role: Role.CLIENT, hostelBlock: 'Randoulène' } });
     world.customers.push(c);
   }
   for (let i = 1; i <= size.vendors; i++) {

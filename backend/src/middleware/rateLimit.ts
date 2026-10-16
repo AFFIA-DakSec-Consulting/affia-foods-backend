@@ -116,6 +116,15 @@ const RULES: Rule[] = [
     message: 'Too many catalog changes. Please wait a few minutes.',
   },
   { name: 'ADMIN_RECALCULATE', scope: 'user', max: 20, windowMs: 10 * MIN, applies: (r, p) => r.method === 'POST' && p === '/admin/catalog/recalculate', message: 'Too many price recalculations. Please wait a few minutes.' },
+  { name: 'ADMIN_MODULES_WRITE', scope: 'user', max: 60, windowMs: 10 * MIN, applies: (r, p) => ['POST', 'PATCH', 'PUT', 'DELETE'].includes(r.method) && /^\/admin\/(modules|delivery-zones|service-areas|courier-bonuses|promotions|subscription-plans|campaigns|loyalty-rules)(\/|$)/.test(p), message: 'Too many changes. Please wait a few minutes.' },
+  { name: 'SUPPORT_CREATE', scope: 'user', max: 10, windowMs: 60 * MIN, applies: (r, p) => r.method === 'POST' && p === '/support/tickets', message: 'Too many support requests. Please wait before sending another one.' },
+  { name: 'SUPPORT_MESSAGE', scope: 'user', max: 30, windowMs: 10 * MIN, applies: (r, p) => r.method === 'POST' && /^\/support\/tickets\/[^/]+\/messages$/.test(p), message: 'Too many messages. Please wait a few minutes.' },
+  { name: 'REVIEW_REPORT', scope: 'user', max: 20, windowMs: 60 * MIN, applies: (r, p) => r.method === 'POST' && /^\/reviews\/[^/]+\/report$/.test(p), message: 'Too many reports. Please wait.' },
+  { name: 'ADMIN_SUPPORT_WRITE', scope: 'user', max: 240, windowMs: 10 * MIN, applies: (r, p) => ['POST', 'PATCH'].includes(r.method) && /^\/admin\/(support|reviews)(\/|$)/.test(p), message: 'Too many changes. Please wait a few minutes.' },
+  { name: 'ADMIN_TEAM_WRITE', scope: 'user', max: 30, windowMs: 10 * MIN, applies: (r, p) => ['POST', 'PATCH', 'DELETE'].includes(r.method) && /^\/admin\/team(\/|$)/.test(p) && !/^\/admin\/team\/me\/(2fa|sessions)(\/|$)/.test(p), message: 'Too many team changes. Please wait a few minutes.' },
+  { name: 'ADMIN_2FA', scope: 'user', max: 10, windowMs: 10 * MIN, applies: (r, p) => r.method === 'POST' && /^\/admin\/team\/me\/2fa\//.test(p), message: 'Too many attempts. Please wait a few minutes.' },
+  { name: 'ADMIN_CONTENT_WRITE', scope: 'user', max: 120, windowMs: 10 * MIN, applies: (r, p) => ['POST', 'PATCH', 'PUT', 'DELETE'].includes(r.method) && /^\/admin\/(legal-documents|help-articles|prospects|referrals)(\/|$)/.test(p), message: 'Too many changes. Please wait a few minutes.' },
+  { name: 'ADMIN_SIMULATE', scope: 'user', max: 120, windowMs: 10 * MIN, applies: (r, p) => r.method === 'POST' && p === '/admin/pricing/simulate', message: 'Too many simulations. Please wait a few minutes.' },
   { name: 'ADMIN_SETTINGS_WRITE', scope: 'user', max: 30, windowMs: 10 * MIN, applies: (r, p) => r.method === 'PUT' && /^\/admin\/settings\/[^/]+$/.test(p), message: 'Too many settings changes. Please wait a few minutes.' },
   // Docs/21 phase 2: payout details, settlement actions and the rider ledger. Money endpoints: tight enough that a stuck loop or a
   // script cannot hammer them, loose enough for a real end-of-day session (many restaurants to mark paid).

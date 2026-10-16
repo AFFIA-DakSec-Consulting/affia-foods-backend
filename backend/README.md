@@ -46,7 +46,7 @@ GOOGLE_WEB_CLIENT_ID=test-client-id.apps.googleusercontent.com npx jest --runInB
 | `services/pricing.ts`, `settlement.ts`, `payout*` | Prix recalculés côté serveur, commissions, reversements aux partenaires |
 | `services/push/` | Notifications FCM (envoyées après commit, sans doublon) |
 | `realtime.ts` | Socket.io : salons `order_<id>`, `vendor_<id>`, `drivers` |
-| `middleware/` | Auth JWT + rôles (`STUDENT`, `VENDOR`, `DRIVER`, `ADMIN`), limitation de débit, erreurs |
+| `middleware/` | Auth JWT + rôles (`CLIENT`, `VENDOR`, `DRIVER`, `ADMIN`), limitation de débit, erreurs |
 | `config/campus.ts` | Points de dépôt du campus (source unique) |
 | `prisma/` | Schéma et migrations (`AAAAMMJJ_nom`, toujours additives) |
 

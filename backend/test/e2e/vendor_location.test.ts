@@ -9,7 +9,7 @@ import { join } from 'path';
 import supertest from 'supertest';
 import { startTestServer, stopTestServer, TestServerInstance } from '../harness/app';
 import { prisma, seedTestDatabase, cleanTestOrders, cleanTestUsers } from '../harness/db';
-import { getAdminToken, getStudentToken, getVendorToken, getDriverToken, getAuthHeader } from '../harness/auth';
+import { getAdminToken, getClientToken, getVendorToken, getDriverToken, getAuthHeader } from '../harness/auth';
 import { __resetLoginLimiter } from '../../src/services/loginLimiter';
 import { __resetSignupLimiter } from '../../src/routes/partners';
 import { __resetRateLimits, rateLimitMiddleware } from '../../src/middleware/rateLimit';
@@ -217,7 +217,7 @@ describe('Restaurant location (device + admin)', () => {
 
     test('needs a login and the VENDOR role (customer, rider, admin get 403)', async () => {
       expect((await request.put('/api/partner/vendor/location').send(PIN)).status).toBe(401);
-      for (const t of [getStudentToken(), getDriverToken(), getAdminToken()]) expect((await put(t, PIN)).status).toBe(403);
+      for (const t of [getClientToken(), getDriverToken(), getAdminToken()]) expect((await put(t, PIN)).status).toBe(403);
       const v = await prisma.vendor.findUniqueOrThrow({ where: { id: 'ven-1' } });
       expect([v.lat, v.lng, v.locationSource]).toEqual([PLACEHOLDER.lat, PLACEHOLDER.lng, null]);
     });
@@ -446,9 +446,11 @@ describe('Restaurant location (device + admin)', () => {
       expect(apps.body.data.find((a: any) => a.id === id).vendor).toMatchObject({ lat: 14.7936, lng: -16.9386, locationSource: 'ADMIN', locationAccuracyM: null, hasLocation: true });
     });
 
-    test('a campus-centre pin is a real pin (hasLocation true)', async () => {
-      const res = await request.patch('/api/admin/vendors/ven-1/location').set(adminH()).send({ lat: CAMPUS_CENTER.lat, lng: CAMPUS_CENTER.lng });
-      expect(res.body.data.hasLocation).toBe(true);
+    test('a pin next to the centre of Thiès is a real pin (hasLocation true); the centre itself is the placeholder', async () => {
+      const near = await request.patch('/api/admin/vendors/ven-1/location').set(adminH()).send({ lat: CAMPUS_CENTER.lat + 0.001, lng: CAMPUS_CENTER.lng });
+      expect(near.body.data.hasLocation).toBe(true);
+      const exact = await request.patch('/api/admin/vendors/ven-1/location').set(adminH()).send({ lat: CAMPUS_CENTER.lat, lng: CAMPUS_CENTER.lng });
+      expect(exact.body.data.hasLocation).toBe(false);
     });
   });
 });

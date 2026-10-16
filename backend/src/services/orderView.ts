@@ -50,7 +50,7 @@ export const ORDER_VIEW_INCLUDE = {
 } satisfies Prisma.OrderInclude;
 
 export type OrderWithRelations = Prisma.OrderGetPayload<{ include: typeof ORDER_VIEW_INCLUDE }>;
-export type ViewerRole = 'STUDENT' | 'VENDOR' | 'DRIVER' | 'ADMIN';
+export type ViewerRole = 'CLIENT' | 'VENDOR' | 'DRIVER' | 'ADMIN';
 
 const POOL_STATUSES = new Set(['ACCEPTED', 'PREPARING', 'READY_FOR_PICKUP']);
 export const ACTIVE_RIDER_STATUSES = ['ACCEPTED', 'PREPARING', 'READY_FOR_PICKUP', 'PICKED_UP', 'ARRIVED_AT_GATE'] as const;
@@ -137,7 +137,7 @@ const buildView = (o: OrderWithRelations) => ({
   discount: o.discount,
   dropoffHostel: o.dropoffHostel,
   // Docs/19: the canonical drop point with its pin; null for stored text that is not a drop point (very old data). Same visibility as dropoffHostel.
-  dropoff: dropoffView(o.dropoffHostel),
+  dropoff: dropoffView(o.dropoffHostel, o.dropoffLat, o.dropoffLng),
   dropoffNotes: (o.dropoffNotes ?? null) as string | null,
   createdAt: o.createdAt.toISOString(),
   updatedAt: o.updatedAt.toISOString(),
@@ -205,7 +205,7 @@ export function orderView(o: OrderWithRelations, viewerRole: ViewerRole | string
         })),
       };
     }
-    case 'STUDENT': {
+    case 'CLIENT': {
       if (o.customerId !== viewerId) return null;
       return {
         ...buildView(o),

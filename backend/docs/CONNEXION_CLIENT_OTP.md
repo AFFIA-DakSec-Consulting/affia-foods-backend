@@ -86,7 +86,7 @@ Réponse 200 :
   "token": "eyJhbGciOi...",
   "user": {
     "id": "…", "name": "Client", "email": null, "phone": "+221 771234567",
-    "role": "STUDENT", "isStudent": null, "hostelBlock": null, "avatarId": null, "kraveoCoins": 0
+    "role": "CLIENT", "isStudent": null, "hostelBlock": null, "avatarId": null, "kraveoCoins": 0
   },
   "isNewUser": true,
   "needsProfile": true

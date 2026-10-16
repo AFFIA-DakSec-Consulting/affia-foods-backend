@@ -15,8 +15,8 @@ export const generateTestToken = (payload: TokenPayload): string => {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: '1h' });
 };
 
-export const getStudentToken = (id: string = 'usr-1', phone: string = '+221 776543210'): string => {
-  return generateTestToken({ id, phone, role: Role.STUDENT });
+export const getClientToken = (id: string = 'usr-1', phone: string = '+221 776543210'): string => {
+  return generateTestToken({ id, phone, role: Role.CLIENT });
 };
 
 export const getVendorToken = (id: string = 'usr-3', phone: string = '+221 776543212'): string => {

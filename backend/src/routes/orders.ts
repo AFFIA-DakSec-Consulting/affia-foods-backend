@@ -7,7 +7,7 @@ import {
   POOL_LIMIT, RECENTLY_FINISHED_MIN, vendorAcceptWindowMin, READY_NO_RIDER_ALERT_MIN, DELIVERY_STUCK_ALERT_MIN, MAX_REFUND_ATTEMPTS,
   RIDER_PICKUP_ALERT_MIN, REFUND_PENDING_ALERT_MIN,
 } from '../config/orderFlow';
-import { normalizeDropPoint } from '../config/campus';
+import { normalizeDropPoint, validPin } from '../config/campus';
 import { orderView, ORDER_VIEW_INCLUDE, OrderWithRelations, payableAmount } from '../services/orderView';
 import {
   OrderFlowError, placeOrder, cancelOrder, advanceStatus, claimOrder, releaseOrder, reassignOrder, verifyGateOtp, resetOtpLock,
@@ -24,6 +24,7 @@ import { isPaymentMethod, paymentMethodsView, PAYMENT_METHODS } from '../service
 import { recordRiderLocation } from '../realtime';
 import { writeAudit } from '../services/audit';
 import { fail } from '../utils/http';
+import { checkCustomerPin } from '../services/serviceAreas';
 import { CURRENCY_CODE, CURRENCY_LABEL, fcfaFromMinor } from '../config/currency';
 
 /**
@@ -59,7 +60,7 @@ const requiredReason = (raw: unknown): string | null => {
 // ----------------------------------------------------------------------------
 // Customer: place an order
 // ----------------------------------------------------------------------------
-orderRouter.post('/orders', requireAuth, requireRole('STUDENT'), async (req: AuthenticatedRequest, res: Response) => {
+orderRouter.post('/orders', requireAuth, requireRole('CLIENT'), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const b = req.body && typeof req.body === 'object' ? req.body : {};
     if (typeof b.vendorId !== 'string' || !ID_RE.test(b.vendorId)) return bad(res, 'vendorId is required.', 'vendorId');
@@ -71,11 +72,21 @@ orderRouter.post('/orders', requireAuth, requireRole('STUDENT'), async (req: Aut
       dropoffHostel = me?.hostelBlock ?? '';
     }
     const canonicalDropoff = normalizeDropPoint(dropoffHostel);
-    if (!canonicalDropoff) return bad(res, 'Choose one of the delivery quartiers.', 'dropoffHostel');
+    if (!canonicalDropoff) return bad(res, 'Enter a delivery address (2 to 200 characters, no special symbols).', 'dropoffHostel');
     dropoffHostel = canonicalDropoff;
 
     const dropoffNotes = optionalReason(b.dropoffNotes, 300);
     if (dropoffNotes === false) return bad(res, 'Delivery notes can be at most 300 characters.', 'dropoffNotes');
+
+    // A GPS pin is optional but must be complete and real: both numbers in range, or neither.
+    if ((b.lat !== undefined && b.lat !== null) !== (b.lng !== undefined && b.lng !== null)) return bad(res, 'Send both lat and lng, or neither.', 'lat');
+    if (b.lat !== undefined && b.lat !== null && !validPin(b.lat, b.lng)) return bad(res, 'lat and lng must be real coordinates.', 'lat');
+    const dropoffLat = validPin(b.lat, b.lng) ? (b.lat as number) : null;
+    const dropoffLng = validPin(b.lat, b.lng) ? (b.lng as number) : null;
+    // Where the app is available (module "Zones de service"): a pin outside the allowed areas, or a missing one when the rule needs it, is refused.
+    const zone = await checkCustomerPin(dropoffLat, dropoffLng);
+    if (zone) return bad(res, zone.message, zone.field, zone.code);
+
     if (b.couponCode !== undefined && b.couponCode !== null && (typeof b.couponCode !== 'string' || b.couponCode.length > 30)) return bad(res, 'Invalid coupon code.', 'couponCode');
     let clientRequestId: string | null = null;
     if (b.clientRequestId !== undefined && b.clientRequestId !== null) {
@@ -87,6 +98,8 @@ orderRouter.post('/orders', requireAuth, requireRole('STUDENT'), async (req: Aut
       vendorId: b.vendorId,
       items: b.items,
       dropoffHostel,
+      dropoffLat,
+      dropoffLng,
       dropoffNotes,
       couponCode: b.couponCode ?? undefined,
       clientRequestId,
@@ -124,7 +137,7 @@ const parseCoupon = (raw: unknown): { ok: true; couponCode: string | undefined }
   raw !== undefined && raw !== null && (typeof raw !== 'string' || raw.length > 30) ? { ok: false } : { ok: true, couponCode: (raw as string | null | undefined) ?? undefined };
 
 // Prices a cart without writing anything: the same code that places the order, so what is quoted is what is charged.
-orderRouter.post('/orders/quote', requireAuth, requireRole('STUDENT'), async (req: AuthenticatedRequest, res: Response) => {
+orderRouter.post('/orders/quote', requireAuth, requireRole('CLIENT'), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const b = req.body && typeof req.body === 'object' ? req.body : {};
     const parsed = parseRestaurants(b.restaurants);
@@ -138,7 +151,7 @@ orderRouter.post('/orders/quote', requireAuth, requireRole('STUDENT'), async (re
   }
 });
 
-orderRouter.post('/order-groups', requireAuth, requireRole('STUDENT'), async (req: AuthenticatedRequest, res: Response) => {
+orderRouter.post('/order-groups', requireAuth, requireRole('CLIENT'), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const b = req.body && typeof req.body === 'object' ? req.body : {};
     const parsed = parseRestaurants(b.restaurants);
@@ -150,10 +163,20 @@ orderRouter.post('/order-groups', requireAuth, requireRole('STUDENT'), async (re
       dropoffHostel = me?.hostelBlock ?? '';
     }
     const canonicalDropoff = normalizeDropPoint(dropoffHostel);
-    if (!canonicalDropoff) return bad(res, 'Choose one of the delivery quartiers.', 'dropoffHostel');
+    if (!canonicalDropoff) return bad(res, 'Enter a delivery address (2 to 200 characters, no special symbols).', 'dropoffHostel');
 
     const dropoffNotes = optionalReason(b.dropoffNotes, 300);
     if (dropoffNotes === false) return bad(res, 'Delivery notes can be at most 300 characters.', 'dropoffNotes');
+
+    // A GPS pin is optional but must be complete and real: both numbers in range, or neither.
+    if ((b.lat !== undefined && b.lat !== null) !== (b.lng !== undefined && b.lng !== null)) return bad(res, 'Send both lat and lng, or neither.', 'lat');
+    if (b.lat !== undefined && b.lat !== null && !validPin(b.lat, b.lng)) return bad(res, 'lat and lng must be real coordinates.', 'lat');
+    const dropoffLat = validPin(b.lat, b.lng) ? (b.lat as number) : null;
+    const dropoffLng = validPin(b.lat, b.lng) ? (b.lng as number) : null;
+    // Where the app is available (module "Zones de service"): a pin outside the allowed areas, or a missing one when the rule needs it, is refused.
+    const zone = await checkCustomerPin(dropoffLat, dropoffLng);
+    if (zone) return bad(res, zone.message, zone.field, zone.code);
+
     const coupon = parseCoupon(b.couponCode);
     if (!coupon.ok) return bad(res, 'Invalid coupon code.', 'couponCode');
     // Required for a combined order (the group is stored under it and the children derive their own ids from it).
@@ -162,6 +185,8 @@ orderRouter.post('/order-groups', requireAuth, requireRole('STUDENT'), async (re
     const placed = await placeGroup(req.user!.id, {
       restaurants: parsed.restaurants,
       dropoffHostel: canonicalDropoff,
+      dropoffLat,
+      dropoffLng,
       dropoffNotes,
       couponCode: coupon.couponCode,
       clientRequestId: b.clientRequestId,
@@ -177,10 +202,10 @@ orderRouter.post('/order-groups', requireAuth, requireRole('STUDENT'), async (re
   }
 });
 
-/** The owner (STUDENT) and the admin may read a group; everyone else (restaurants, riders) and a missing group get the same 404. */
-const canSeeGroup = (req: AuthenticatedRequest, b: GroupBundle) => req.user!.role === 'ADMIN' || (req.user!.role === 'STUDENT' && b.group.customerId === req.user!.id);
+/** The owner (CLIENT) and the admin may read a group; everyone else (restaurants, riders) and a missing group get the same 404. */
+const canSeeGroup = (req: AuthenticatedRequest, b: GroupBundle) => req.user!.role === 'ADMIN' || (req.user!.role === 'CLIENT' && b.group.customerId === req.user!.id);
 
-orderRouter.get('/order-groups', requireAuth, requireRole('STUDENT'), async (req: AuthenticatedRequest, res: Response) => {
+orderRouter.get('/order-groups', requireAuth, requireRole('CLIENT'), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const scope = req.query.scope;
     if (scope !== undefined && scope !== 'active' && scope !== 'history') return bad(res, "scope must be 'active' or 'history'.", 'scope');
@@ -244,7 +269,7 @@ orderRouter.get('/orders', requireAuth, async (req: AuthenticatedRequest, res: R
       if (typeof req.query.status === 'string' && STATUSES.has(req.query.status)) f.status = req.query.status as any;
       if (typeof req.query.paymentStatus === 'string' && ['PENDING', 'PAID', 'FAILED', 'REFUNDED'].includes(req.query.paymentStatus)) f.paymentStatus = req.query.paymentStatus as any;
       and.push(f);
-    } else if (user.role === 'STUDENT') {
+    } else if (user.role === 'CLIENT') {
       and.push({ customerId: user.id });
     } else if (user.role === 'DRIVER') {
       and.push({ driverId: user.id });
@@ -328,7 +353,7 @@ orderRouter.get('/orders/:id', requireAuth, validId, async (req: AuthenticatedRe
 // ----------------------------------------------------------------------------
 // Cancel / reject / status
 // ----------------------------------------------------------------------------
-orderRouter.post('/orders/:id/cancel', requireAuth, requireRole('STUDENT'), validId, async (req: AuthenticatedRequest, res: Response) => {
+orderRouter.post('/orders/:id/cancel', requireAuth, requireRole('CLIENT'), validId, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const reason = optionalReason(req.body?.reason);
     if (reason === false) return bad(res, 'The reason can be at most 200 characters.', 'reason');
@@ -364,7 +389,7 @@ orderRouter.patch('/orders/:id/status', requireAuth, requireApprovedPartner, val
     const role = req.user!.role;
 
     if (status === 'CANCELLED') {
-      if (role === 'STUDENT') {
+      if (role === 'CLIENT') {
         const reason = optionalReason(req.body?.reason);
         const r = await cancelOrder(req.params.id, actorOf(req), 'CUSTOMER', (typeof reason === 'string' && reason) || 'Cancelled by customer');
         return res.json({ success: true, data: viewFor(req, r!.order) });
@@ -381,7 +406,7 @@ orderRouter.patch('/orders/:id/status', requireAuth, requireApprovedPartner, val
       // Exactly the same checks as POST /orders/:id/verify-gate-otp.
       return deliverResponse(req, res, await verifyGateOtp(req.params.id, actorOf(req), req.body?.otpCode ?? req.body?.otp));
     }
-    if (role === 'STUDENT') return res.status(403).json({ success: false, code: 'ROLE_NOT_ALLOWED', message: 'Students can only cancel orders.' });
+    if (role === 'CLIENT') return res.status(403).json({ success: false, code: 'ROLE_NOT_ALLOWED', message: 'Clients can only cancel orders.' });
 
     const r = await advanceStatus(req.params.id, actorOf(req), status);
     return res.json({ success: true, ...(r.idempotent ? { message: `Order is already ${status}.` } : {}), data: viewFor(req, r.order) });
@@ -685,7 +710,7 @@ orderRouter.get('/payments/methods', requireAuth, (req: AuthenticatedRequest, re
  * order (amount always from the server), registers a captured payment at the simulator, and marks the order PAID through the
  * same confirmAndMarkPaid path as the real flow. Nobody is charged. CASH is treated as paid at once (cash is not tracked yet).
  */
-orderRouter.post('/payments/simulate', requireAuth, requireRole('STUDENT'), async (req: AuthenticatedRequest, res: Response) => {
+orderRouter.post('/payments/simulate', requireAuth, requireRole('CLIENT'), async (req: AuthenticatedRequest, res: Response) => {
   try {
     if (!isSimulatedPayments()) return res.status(404).json({ success: false, message: 'Route POST /api/payments/simulate not found.' });
     const { orderId, method } = req.body ?? {};
@@ -711,7 +736,7 @@ orderRouter.post('/payments/simulate', requireAuth, requireRole('STUDENT'), asyn
   }
 });
 
-orderRouter.post('/payments/verify-signature', requireAuth, requireRole('STUDENT'), async (req: AuthenticatedRequest, res: Response) => {
+orderRouter.post('/payments/verify-signature', requireAuth, requireRole('CLIENT'), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body ?? {};
     const ok = (v: unknown) => typeof v === 'string' && v.length > 0 && v.length <= 200;

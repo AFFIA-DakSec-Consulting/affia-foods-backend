@@ -11,6 +11,8 @@ export interface AuthenticatedRequest extends Request {
     id: string;
     phone?: string | null;
     role: UserRole;
+    /** Back-office session id (admin tokens issued since sessions exist). */
+    sid?: string;
   };
 }
 
@@ -21,11 +23,11 @@ const getJwtSecret = (): string => {
   return JWT_SECRET;
 };
 
-type TokenClaims = { id: string; phone?: string | null; role: UserRole; tv?: number };
+type TokenClaims = { id: string; phone?: string | null; role: UserRole; tv?: number; sid?: string };
 
 // Generates real signed JWT tokens with 30-day expiration. `tv` is the user's tokenVersion: bumping it in the
 // database (password reset, suspension, account deletion) revokes every token issued before.
-export const generateToken = (payload: { id: string; phone?: string | null; role: UserRole; tokenVersion?: number | null }): string => {
+export const generateToken = (payload: { id: string; phone?: string | null; role: UserRole; tokenVersion?: number | null; sid?: string }): string => {
   const { tokenVersion, ...claims } = payload;
   return jwt.sign({ ...claims, tv: tokenVersion ?? 0 }, getJwtSecret(), { expiresIn: '30d' });
 };
@@ -126,7 +128,7 @@ export const requireAuth = async (req: AuthenticatedRequest, res: Response, next
     console.error('auth account check failed:', (error as Error).message);
     return res.status(503).json({ success: false, message: 'Service temporarily unavailable. Please try again.' });
   }
-  req.user = { id: decoded.id, phone: decoded.phone, role: decoded.role };
+  req.user = { id: decoded.id, phone: decoded.phone, role: decoded.role, ...(typeof decoded.sid === 'string' ? { sid: decoded.sid } : {}) };
   return next();
 };
 

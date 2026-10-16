@@ -8,6 +8,7 @@
     "start": "node dist/index.js",
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "test": "jest --runInBand",
+    "admin:reset-2fa": "node dist/utils/adminReset2fa.js",
     "seed:demo-partners": "node dist/utils/seedDemoPartners.js",
     "seed:demo": "ts-node src/utils/seedDemoData.ts"
   },

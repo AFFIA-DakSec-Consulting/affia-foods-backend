@@ -2,12 +2,12 @@ import crypto from 'crypto';
 import supertest from 'supertest';
 import { startTestServer, stopTestServer, TestServerInstance } from '../harness/app';
 import { prisma, seedTestDatabase, cleanTestOrders, cleanTestUsers } from '../harness/db';
-import { getStudentToken, getAuthHeader } from '../harness/auth';
+import { getClientToken, getAuthHeader } from '../harness/auth';
 
 describe('Empirical Verification: Payment Webhook Functionality (Milestone 3 Subtask 1)', () => {
   let serverInstance: TestServerInstance;
   let request: ReturnType<typeof supertest>;
-  let studentToken: string;
+  let clientToken: string;
 
   const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET || 'kraveo_webhook_secret_2026';
 
@@ -17,7 +17,7 @@ describe('Empirical Verification: Payment Webhook Functionality (Milestone 3 Sub
     await seedTestDatabase();
     serverInstance = await startTestServer(0);
     request = supertest(serverInstance.app);
-    studentToken = getStudentToken('usr-1', '+221 776543210');
+    clientToken = getClientToken('usr-1', '+221 776543210');
   });
 
   afterAll(async () => {

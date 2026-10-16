@@ -12,7 +12,7 @@ import { clientIp } from '../middleware/rateLimit';
 import { NAME_RE } from '../utils/names';
 import { validParams } from '../utils/http';
 import { disableUserTokens } from '../services/push/deviceTokens';
-import { checkVendorLocation } from '../config/campus';
+import { checkVendorPin } from '../services/serviceAreas';
 import { vendorLocationView, checkAccuracy, devicePinData, describePin } from '../services/vendorLocation';
 import { checkProfile, vendorProfileView } from '../services/vendorProfile';
 import { IMAGE_KINDS, ImageKind, MAX_IMAGE_BYTES, removeUploadedByUrl, saveVendorImage, uploadUrl } from '../services/imageUpload';
@@ -147,12 +147,12 @@ const driverFields = (b: any, ownPhone: string, requirePlate = true): { ok: true
  * Optional restaurant pin sent with sign-up (Docs/20): `lat` + `lng` (both or neither, JSON numbers, within 3 km of the campus)
  * and an optional `locationAccuracyM` (0..5000). null/absent = no location, exactly as before. An accuracy without coordinates is ignored.
  */
-const signupLocation = (b: any): { ok: true; pin: { lat: number; lng: number; accuracyM: number | null } | null } | { ok: false; error: Fail } => {
+const signupLocation = async (b: any): Promise<{ ok: true; pin: { lat: number; lng: number; accuracyM: number | null } | null } | { ok: false; error: Fail }> => {
   const has = (v: unknown) => v !== undefined && v !== null;
   if (!has(b?.lat) && !has(b?.lng)) return { ok: true, pin: null };
   if (!has(b.lat)) return { ok: false, error: { field: 'lat', message: 'Send both latitude and longitude, or neither.' } };
   if (!has(b.lng)) return { ok: false, error: { field: 'lng', message: 'Send both latitude and longitude, or neither.' } };
-  const check = checkVendorLocation(b.lat, b.lng);
+  const check = await checkVendorPin(b.lat, b.lng);
   if (!check.ok) return { ok: false, error: { field: check.field, message: check.message } };
   const acc = checkAccuracy(b.locationAccuracyM);
   if (!acc.ok) return { ok: false, error: { field: 'locationAccuracyM', message: acc.message } };
@@ -220,7 +220,7 @@ partnerRouter.post('/auth/partner-signup', async (req: Request, res: Response) =
 
     const details = role === 'VENDOR' ? vendorFields(b) : driverFields(b, phone);
     if (!details.ok) return bad(details.error);
-    const location = role === 'VENDOR' ? signupLocation(b) : ({ ok: true, pin: null } as const);
+    const location = role === 'VENDOR' ? await signupLocation(b) : ({ ok: true, pin: null } as const);
     if (!location.ok) return bad(location.error);
 
     releaseSlot = reserveSignup(phoneKey(phone), clientIp(req));
@@ -364,7 +364,7 @@ partnerRouter.put('/partner/vendor/location', requireAuth, requireRole('VENDOR')
     if (vendor.approvalStatus !== 'PENDING' && vendor.approvalStatus !== 'APPROVED') {
       return res.status(403).json({ success: false, code: 'PARTNER_NOT_APPROVED', approvalStatus: vendor.approvalStatus, message: notApprovedMessage(vendor.approvalStatus) });
     }
-    const check = checkVendorLocation(b.lat, b.lng);
+    const check = await checkVendorPin(b.lat, b.lng);
     if (!check.ok) return bad({ field: check.field, message: check.message });
     const acc = checkAccuracy(b.accuracyM);
     if (!acc.ok) return bad({ field: 'accuracyM', message: acc.message });
@@ -592,7 +592,7 @@ partnerRouter.get('/admin/customers', requireAuth, requireRole('ADMIN'), async (
     const requested = Number.parseInt(String(req.query.limit ?? ''), 10);
     const limit = Math.min(Number.isFinite(requested) && requested > 0 ? requested : 50, 100);
     const cursor = typeof req.query.cursor === 'string' && req.query.cursor ? req.query.cursor : undefined;
-    const where: any = { role: Role.STUDENT };
+    const where: any = { role: Role.CLIENT };
     // Accounts the customer deleted are anonymised ("Deleted user", no email/phone); they are noise in the list.
     if (req.query.includeDeleted !== '1') where.NOT = { name: 'Deleted user', email: null, googleSub: null };
     if (search) {
@@ -636,7 +636,7 @@ partnerRouter.get('/admin/customers', requireAuth, requireRole('ADMIN'), async (
 
 partnerRouter.get('/admin/customers/:id', requireAuth, requireRole('ADMIN'), validParams('id'), async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const user = await prisma.user.findFirst({ where: { id: req.params.id, role: Role.STUDENT } });
+    const user = await prisma.user.findFirst({ where: { id: req.params.id, role: Role.CLIENT } });
     if (!user) return res.status(404).json({ success: false, message: 'Customer not found.' });
     const [orders, grouped, paidSum] = await Promise.all([
       prisma.order.findMany({

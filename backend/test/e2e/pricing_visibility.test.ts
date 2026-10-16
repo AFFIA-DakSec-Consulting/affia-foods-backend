@@ -15,7 +15,7 @@ import { Socket } from 'socket.io-client';
 import { Role } from '@prisma/client';
 import { startTestServer, stopTestServer, TestServerInstance } from '../harness/app';
 import { prisma, seedTestDatabase, cleanTestOrders, cleanTestUsers } from '../harness/db';
-import { getStudentToken, getVendorToken, getDriverToken, getAdminToken, getAuthHeader } from '../harness/auth';
+import { getClientToken, getVendorToken, getDriverToken, getAdminToken, getAuthHeader } from '../harness/auth';
 import { connectTestSocket, disconnectTestSocket } from '../harness/socket';
 import { useLegacyCoupons } from '../harness/legacyEconomics';
 import { setPaymentProvider, createSimulatedProvider } from '../../src/services/paymentService';
@@ -95,12 +95,12 @@ describe('Pricing: money and visibility', () => {
   // A brand-new customer for every test: VITFIRST is first-order only, and nobody hits the unpaid-orders limit.
   let cur = { id: '', token: '' };
   let cur2 = { id: '', token: '' };
-  const freshStudent = async () => {
+  const freshClient = async () => {
     const n = randomUUID().replace(/-/g, '').slice(0, 10);
     const phone = `+221 779${String(Math.floor(Math.random() * 1_000_000)).padStart(6, "0")}`;
     const id = `usr-pv-f${n}`;
-    await prisma.user.create({ data: { id, name: 'Fresh Student', phone, role: Role.STUDENT, hostelBlock: 'Escale' } });
-    return { id, token: getStudentToken(id, phone) };
+    await prisma.user.create({ data: { id, name: 'Fresh Client', phone, role: Role.CLIENT, hostelBlock: 'Escale' } });
+    return { id, token: getClientToken(id, phone) };
   };
   let restoreCoupons: () => void = () => undefined;
   let dishA = '';
@@ -168,8 +168,8 @@ describe('Pricing: money and visibility', () => {
     __resetRateLimits();
     await resetSettings();
     await adminPut('fees', { baseFee: 37 });
-    cur = await freshStudent();
-    cur2 = await freshStudent();
+    cur = await freshClient();
+    cur2 = await freshClient();
     await prisma.pushLog.deleteMany({});
     await prisma.deviceToken.deleteMany({});
     await prisma.driverPartner.updateMany({ where: { userId: { not: RIDER.id } }, data: { dutyStatus: 'OFFLINE' } });

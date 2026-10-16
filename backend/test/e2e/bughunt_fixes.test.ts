@@ -160,7 +160,7 @@ describe('Pre-demo bug hunt fixes', () => {
       for (const k of ['RL_ORDER_CREATE_MAX', 'RL_ORDER_CANCEL_MAX', 'RL_PAYMENT_CREATE_MAX', 'RL_AUTH_IP_MAX', 'RL_DEVICE_WRITE_MAX', 'RL_VENDOR_LOCATION_MAX']) setEnv(k, undefined);
       process.env.NODE_ENV = 'production';
       try {
-        const tok = generateTestToken({ id: 'bf-limit-user', phone: '+221 777999992', role: 'STUDENT' as any });
+        const tok = generateTestToken({ id: 'bf-limit-user', phone: '+221 777999992', role: 'CLIENT' as any });
         const attempt = (method: string, p: string, body: any = {}) => {
           let nexted = false;
           const res: any = { setHeader() {}, status() { return this; }, json() { return this; } };
@@ -294,7 +294,7 @@ describe('Pre-demo bug hunt fixes', () => {
       expect(hours[8]).toEqual({ hour: '08:00', orders: 1 });
       expect(hours[14].orders).toBe(0);
       expect(res.body.data.averageDeliveryMinutes).toBe(18);
-      expect(Object.keys(res.body.data).sort()).toEqual(['activeStudents', 'averageDeliveryMinutes', 'cancellationRate', 'generatedAt', 'grossOrderVolume', 'hostelOrders', 'hourlyOrders', 'orderCount', 'range', 'topVendor']);
+      expect(Object.keys(res.body.data).sort()).toEqual(['activeClients', 'averageDeliveryMinutes', 'cancellationRate', 'generatedAt', 'grossOrderVolume', 'hostelOrders', 'hourlyOrders', 'orderCount', 'range', 'topVendor']);
 
       const today = await request.get('/api/analytics?range=today').set(bearer(W.admin.token));
       expect(today.status).toBe(200);

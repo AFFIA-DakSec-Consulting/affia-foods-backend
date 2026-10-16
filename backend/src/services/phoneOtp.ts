@@ -33,7 +33,7 @@ export const requestOtp = async (rawPhone: unknown) => {
   const phone = canonicalPhone(rawPhone);
   if (!phone) throw badPhone();
   const owner = await prisma.user.findFirst({ where: { phone: { endsWith: phoneKey(phone) }, deletedAt: null }, select: { role: true } });
-  if (owner && owner.role !== Role.STUDENT) throw new AppError(403, 'PARTNER_ACCOUNT', 'This number belongs to a Kraveo partner. Use the partner app.');
+  if (owner && owner.role !== Role.CLIENT) throw new AppError(403, 'PARTNER_ACCOUNT', 'This number belongs to a Kraveo partner. Use the partner app.');
 
   const sender = isTestClient(phone) ? null : getOtpSender();
   if (!isTestClient(phone) && !sender) throw new AppError(503, 'OTP_NOT_CONFIGURED', 'Sign-in codes cannot be sent right now. Please try again later.');
@@ -89,10 +89,10 @@ export const verifyOtp = async (rawPhone: unknown, rawCode: unknown) => {
 
   let user = await prisma.user.findFirst({ where: { phone: { endsWith: phoneKey(phone) }, deletedAt: null } });
   let isNewUser = false;
-  if (user && user.role !== Role.STUDENT) throw new AppError(403, 'PARTNER_ACCOUNT', 'This number belongs to a Kraveo partner. Use the partner app.');
+  if (user && user.role !== Role.CLIENT) throw new AppError(403, 'PARTNER_ACCOUNT', 'This number belongs to a Kraveo partner. Use the partner app.');
   if (!user) {
     try {
-      user = await prisma.user.create({ data: { phone, name: 'Client', role: Role.STUDENT } });
+      user = await prisma.user.create({ data: { phone, name: 'Client', role: Role.CLIENT } });
       isNewUser = true;
     } catch (err: any) {
       if (err?.code !== 'P2002') throw err;
@@ -104,6 +104,6 @@ export const verifyOtp = async (rawPhone: unknown, rawCode: unknown) => {
 
 /** Creates (or refreshes) the test client with a complete profile, so it goes straight to the home screen. */
 export const ensureTestClient = async () => {
-  const data = { name: TEST_CLIENT.name, phone: TEST_CLIENT.phone, role: Role.STUDENT, avatarId: 1, hostelBlock: TEST_CLIENT.quartier, kraveoCoins: 100 };
+  const data = { name: TEST_CLIENT.name, phone: TEST_CLIENT.phone, role: Role.CLIENT, avatarId: 1, hostelBlock: TEST_CLIENT.quartier, kraveoCoins: 100 };
   return prisma.user.upsert({ where: { phone: TEST_CLIENT.phone }, update: data, create: { id: 'demo-cus-test', ...data } });
 };

@@ -9,7 +9,7 @@ import supertest from 'supertest';
 import { Role } from '@prisma/client';
 import { startTestServer, stopTestServer, TestServerInstance } from '../harness/app';
 import { prisma, seedTestDatabase, cleanTestOrders, cleanTestUsers } from '../harness/db';
-import { getStudentToken, getVendorToken, getAdminToken, getAuthHeader } from '../harness/auth';
+import { getClientToken, getVendorToken, getAdminToken, getAuthHeader } from '../harness/auth';
 import { __resetRateLimits } from '../../src/middleware/rateLimit';
 import { invalidateSettingsCache, getSettings } from '../../src/services/settings';
 import { validateAndCalculateOrder } from '../../src/utils/validation';
@@ -22,13 +22,13 @@ afterAll(() => restoreEconomics());
 
 jest.setTimeout(60_000);
 
-const STUDENT = { id: 'usr-1', phone: '+221 776543210' };
+const CLIENT = { id: 'usr-1', phone: '+221 776543210' };
 const ADMIN = { id: 'usr-5', phone: '+221 776543214' };
 const V1 = { id: 'usr-pc-v1', phone: '+221 779861111', vendorId: 'pc-ven-1' };
 const V2 = { id: 'usr-pc-v2', phone: '+221 779862222', vendorId: 'pc-ven-2' };
 const PENDING_V = { id: 'usr-pc-v3', phone: '+221 779863333', vendorId: 'pc-ven-3' };
 
-const tStudent = getStudentToken(STUDENT.id, STUDENT.phone);
+const tClient = getClientToken(CLIENT.id, CLIENT.phone);
 const tAdmin = getAdminToken(ADMIN.id, ADMIN.phone);
 const tV1 = getVendorToken(V1.id, V1.phone);
 const tV2 = getVendorToken(V2.id, V2.phone);
@@ -57,7 +57,7 @@ describe('Pricing and catalog (phase 1)', () => {
     request.post(`/api/vendors/${vendorId}/items`).set(H(token)).send({ name: `Dish ${randomUUID().slice(0, 6)}`, price: 100, category: 'Main', description: 'd', ...body });
   const patchDish = (token: string, id: string, body: unknown) => request.patch(`/api/vendors/items/${id}`).set(H(token)).send(body as any);
   const order = (items: { itemId: string; quantity: number }[], vendorId = V1.vendorId, extra: Record<string, unknown> = {}) =>
-    request.post('/api/orders').set(H(tStudent)).send({ vendorId, items, dropoffHostel: 'Cité Lamy', clientRequestId: randomUUID(), ...extra });
+    request.post('/api/orders').set(H(tClient)).send({ vendorId, items, dropoffHostel: 'Cité Lamy', clientRequestId: randomUUID(), ...extra });
   const dbItem = (id: string) => prisma.menuItem.findUniqueOrThrow({ where: { id } });
   const audits = (action: string, targetId?: string) => prisma.adminAuditLog.findMany({ where: { action, ...(targetId ? { targetId } : {}) } });
   const setFees = (body: unknown) => adminPut('/api/admin/settings/fees', body);
@@ -88,7 +88,7 @@ describe('Pricing and catalog (phase 1)', () => {
         create: { id: v.vendorId, userId: v.id, name: `PC Kitchen ${v.vendorId.slice(-1)}`, category: 'Test', address: 'Gate', bannerImage: '', approvalStatus: status },
       });
     }
-    await prisma.user.update({ where: { id: STUDENT.id }, data: { name: 'Rahul Sharma', phone: STUDENT.phone, hostelBlock: 'Randoulène' } });
+    await prisma.user.update({ where: { id: CLIENT.id }, data: { name: 'Rahul Sharma', phone: CLIENT.phone, hostelBlock: 'Randoulène' } });
     server = await startTestServer(0);
     request = supertest(server.app);
   });
@@ -99,7 +99,7 @@ describe('Pricing and catalog (phase 1)', () => {
     __resetRateLimits();
     await resetSettings();
     await prisma.adminAuditLog.deleteMany({});
-    await prisma.order.updateMany({ where: { customerId: STUDENT.id, status: 'PLACED', paymentStatus: { in: ['PENDING', 'FAILED'] } }, data: { status: 'CANCELLED', cancelledAt: new Date() } });
+    await prisma.order.updateMany({ where: { customerId: CLIENT.id, status: 'PLACED', paymentStatus: { in: ['PENDING', 'FAILED'] } }, data: { status: 'CANCELLED', cancelledAt: new Date() } });
     await prisma.vendor.updateMany({ where: { id: { in: [V1.vendorId, V2.vendorId] } }, data: { commissionType: null, commissionValue: null } });
     await prisma.menuItem.deleteMany({ where: { vendorId: { in: [V1.vendorId, V2.vendorId, PENDING_V.vendorId] } } });
   });
@@ -131,7 +131,7 @@ describe('Pricing and catalog (phase 1)', () => {
       expect((await adminGet('/api/admin/settings/rounding')).body.data.value).toEqual({ step: 1 });
       expect((await adminGet('/api/admin/settings/settlement')).body.data.value).toEqual({ time: '22:00', mode: 'MANUAL_PAYOUT', autoCreate: true, holdDays: 0 });
       expect((await adminGet('/api/admin/settings/nope')).status).toBe(404);
-      for (const t of [tStudent, tV1]) {
+      for (const t of [tClient, tV1]) {
         expect((await get('/api/admin/settings', t)).status).toBe(403);
         expect((await request.put('/api/admin/settings/fees').set(H(t)).send({ baseFee: 1 })).status).toBe(403);
       }
@@ -273,7 +273,7 @@ describe('Pricing and catalog (phase 1)', () => {
       expect(r.body.count).toBe(3);
       // other restaurant, customer, no token
       expect((await get(`/api/vendors/${V1.vendorId}/menu-manage`, tV2)).status).toBe(403);
-      expect((await get(`/api/vendors/${V1.vendorId}/menu-manage`, tStudent)).status).toBe(403);
+      expect((await get(`/api/vendors/${V1.vendorId}/menu-manage`, tClient)).status).toBe(403);
       expect((await get(`/api/vendors/${V1.vendorId}/menu-manage`)).status).toBe(401);
       expect((await get('/api/vendors/no-such/menu-manage', tV1)).status).toBe(404);
       expect((await get('/api/vendors/bad%20id/menu-manage', tV1)).status).toBe(400);
@@ -294,7 +294,7 @@ describe('Pricing and catalog (phase 1)', () => {
       expect((await addDish(tV1, V2.vendorId)).status).toBe(403);
       expect((await addDish(tV1, 'ghost-vendor')).status).toBe(403);
       expect((await addDish(tAdmin, 'ghost-vendor')).status).toBe(404);
-      expect((await addDish(tStudent, V1.vendorId)).status).toBe(403);
+      expect((await addDish(tClient, V1.vendorId)).status).toBe(403);
     });
 
     test('at most 50 dishes can wait for approval per restaurant (the queue cannot be flooded)', async () => {
@@ -387,7 +387,7 @@ describe('Pricing and catalog (phase 1)', () => {
       for (const price of [0, -1, 'x', null, 1e9, 10.005]) expect((await patchDish(tV1, id, { price })).status).toBe(400);
       expect((await patchDish(tV1, id, {})).status).toBe(400);
       expect((await patchDish(tV2, id, { price: 90 })).status).toBe(403);
-      expect((await patchDish(tStudent, id, { price: 90 })).status).toBe(403);
+      expect((await patchDish(tClient, id, { price: 90 })).status).toBe(403);
       expect((await dbItem(id)).vendorPrice).toBe(100);
       await adminDel(`/api/admin/catalog/${id}`);
       expect((await patchDish(tV1, id, { price: 90 })).status).toBe(404);
@@ -424,7 +424,7 @@ describe('Pricing and catalog (phase 1)', () => {
     test('/vendors, /vendors/:id and /menus/:id show only approved, not-deleted dishes (sold out stays, greyed)', async () => {
       const ids = await setup();
       const names = (arr: any[]) => arr.map((d) => d.name).sort();
-      for (const token of [undefined, tStudent, tV2]) {
+      for (const token of [undefined, tClient, tV2]) {
         const menu = await get(`/api/menus/${V1.vendorId}`, token);
         expect(names(menu.body.data)).toEqual(['Live one', 'Sold out one']);
         expect(menu.body.data.find((d: any) => d.id === ids.sold).isAvailable).toBe(false);
@@ -496,7 +496,7 @@ describe('Pricing and catalog (phase 1)', () => {
       expect((await order([{ itemId: id, quantity: 1 }])).status).toBe(400);
       expect((await get(`/api/menus/${V1.vendorId}`)).body.data.find((d: any) => d.id === id)).toBeUndefined();
       // the placed order still shows its items
-      const again = await get(`/api/orders/${placed.body.data.id}`, tStudent);
+      const again = await get(`/api/orders/${placed.body.data.id}`, tClient);
       expect(again.body.data.items).toMatchObject([{ menuItemId: id, name: 'Lifecycle', quantity: 2, price: 90 }]);
       await adminPost(`/api/admin/catalog/${id}/restore`);
       expect((await order([{ itemId: id, quantity: 1 }])).status).toBe(201);
@@ -527,7 +527,7 @@ describe('Pricing and catalog (phase 1)', () => {
         ['patch', `/api/admin/vendors/${V1.vendorId}/commission`, { type: 'FLAT', value: 1 }],
       ];
       for (const [m, p, b] of calls) {
-        for (const [t, want] of [[undefined, 401], [tStudent, 403], [tV1, 403]] as const) {
+        for (const [t, want] of [[undefined, 401], [tClient, 403], [tV1, 403]] as const) {
           let q = (request as any)[m](p);
           if (t) q = q.set(H(t));
           const r = await q.send(b ?? {});

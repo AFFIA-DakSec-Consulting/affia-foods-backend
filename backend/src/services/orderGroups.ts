@@ -4,6 +4,7 @@ import { MAX_UNPAID_OPEN_ORDERS } from '../config/orderFlow';
 import { normalizeDropPoint } from '../config/campus';
 import { couponEligibilityProblem, normaliseCoupon, validateAndCalculateGroup, validateAndCalculateOrder, GroupRestaurantInput, GroupValidationResult } from '../utils/validation';
 import { getSettings } from './settings';
+import { scheduleShadow } from '../shared/pricing/shadow';
 import { ORDER_VIEW_INCLUDE, OrderWithRelations, orderView } from './orderView';
 import { publishOrderChange } from '../realtime';
 import {
@@ -125,6 +126,8 @@ function assertGroupPriced(priced: GroupValidationResult): void {
 export type PlaceGroupInput = {
   restaurants: GroupRestaurantInput[];
   dropoffHostel: string;
+  dropoffLat: number | null;
+  dropoffLng: number | null;
   dropoffNotes: string | null;
   couponCode?: string;
   clientRequestId: string;
@@ -229,6 +232,8 @@ export const placeGroup = async (customerId: string, input: PlaceGroupInput): Pr
             customerId,
             clientRequestId: input.clientRequestId,
             dropoffHostel: input.dropoffHostel,
+            dropoffLat: input.dropoffLat,
+            dropoffLng: input.dropoffLng,
             dropoffNotes: input.dropoffNotes,
             couponCode: priced.appliedCoupon,
             discount: priced.discount,
@@ -258,6 +263,8 @@ export const placeGroup = async (customerId: string, input: PlaceGroupInput): Pr
               couponCode: i === 0 ? priced.appliedCoupon : null, // single-use rules count the coupon once
               totalAmount: c.totalAmount,
               dropoffHostel: input.dropoffHostel,
+              dropoffLat: input.dropoffLat,
+              dropoffLng: input.dropoffLng,
               dropoffNotes: input.dropoffNotes,
               status: 'PLACED',
               paymentStatus: 'PENDING',
@@ -271,6 +278,11 @@ export const placeGroup = async (customerId: string, input: PlaceGroupInput): Pr
       { maxWait: 15_000, timeout: 30_000 },
     );
     if (outcome.replay) return outcome;
+    scheduleShadow({
+      kind: 'group', refId: outcome.group.id, customerId, vendors: outcome.orders.map((o) => ({ id: o.vendorId, lat: o.vendor.lat, lng: o.vendor.lng })),
+      cartAmount: priced.subtotal, dropoffHostel: input.dropoffHostel, dropoffLat: input.dropoffLat, dropoffLng: input.dropoffLng, couponCode: priced.appliedCoupon,
+      legacy: { fee: priced.feeTotal, discount: priced.discount, total: priced.totalAmount }, orderIds: outcome.orders.map((o) => o.id),
+    });
     // The replaced checkouts are cancelled for good only now that the new group is committed (a failed checkout rolled them back).
     for (const r of replaced) {
       await auditCancel(r, 'SYSTEM', REPLACED_REASON);

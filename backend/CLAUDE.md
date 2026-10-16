@@ -33,7 +33,7 @@ docker compose down            # ajouter -v pour effacer la base
 
 ### Données de démo
 
-`npm run seed:demo` (`src/utils/seedDemoData.ts`) remplit la base de `.env` : 6 restaurants, 33 plats, 3 livreurs, 6 étudiants et 17 commandes (historique sur 7 jours, plus des commandes en cours). Il est rejouable : tout est upserté par id fixe et les commandes déjà présentes ne sont pas recréées. Il refuse de tourner avec `NODE_ENV=production`. Les ids commencent par `demo-`.
+`npm run seed:demo` (`src/utils/seedDemoData.ts`) remplit la base de `.env` : 6 restaurants, 37 plats, 3 livreurs, 6 clients et 17 commandes (historique sur 7 jours, plus des commandes en cours). Il est rejouable : tout est upserté par id fixe et les commandes déjà présentes ne sont pas recréées. Il refuse de tourner avec `NODE_ENV=production`. Les ids commencent par `demo-`.
 
 - Les images sont dans `public/seed-images/`, servies par le backend sous `/static` (`src/index.ts`) et copiées dans l'image Docker. Les URLs enregistrées en base viennent de `SEED_IMAGE_BASE` (défaut `http://localhost:5001/static/seed-images`). Les apps Flutter locales visent `10.0.2.2` et le dashboard web `localhost` : pour un émulateur Android, relancez avec `SEED_IMAGE_BASE=http://10.0.2.2:5001/static/seed-images`.
 - Les comptes vendeurs et livreurs partagent un mot de passe, écrit avec les numéros dans `DEMO_ACCOUNTS.local.txt` (ignoré par git). Les étudiants se connectent via Google, ils n'ont pas de mot de passe.
@@ -67,9 +67,22 @@ Organisation du harnais :
 - **Monnaie : FCFA (XOF)**, sans centimes. Calculs internes toujours en entiers ×100 (`config/currency.ts`) ; les prix, frais, remises, reversements saisis par une personne doivent être des FCFA entiers. Frais par défaut 500 FCFA (+300 par restaurant en plus), TVA 18 % sur les frais. Pour un vrai fournisseur FCFA, ne convertir (÷100) que dans `paymentService.ts`. L'adaptateur Razorpay ne gère pas le FCFA.
 - **Paiements simulés** : `PAYMENT_PROVIDER=simulated` dans `.env` (refusé si `NODE_ENV=production` sauf `ALLOW_SIMULATED_PAYMENTS=true`). `GET /api/payments/methods` (Wave, Orange Money, espèces + logos de `public/payment-logos`) et `POST /api/payments/simulate {orderId, method}` paient la commande sans débiter personne. Les espèces sont traitées comme payées d'un coup.
 - **Téléphones** : mobiles sénégalais `+221 7[05678]XXXXXXX` (`utils/phone.ts`, clé = 9 derniers chiffres `phoneKey`).
-- **Adresses** : 14 quartiers de Thiès dans `config/campus.ts` (coordonnées approximatives à corriger). Fuseau Africa/Dakar = UTC+0 (`utils/time.ts`, `LOCAL_OFFSET_MS`).
+- **Adresses** : plus de liste imposée (`DROP_POINTS` vide) : le client enregistre, réutilise (`/auth/recent-addresses`) ou saisit une adresse, avec épingle GPS facultative ; règles dans `config/campus.ts` (`normalizeDropPoint`, `validPin`) et `docs/ADRESSES_LIVRAISON.md`. Fuseau Africa/Dakar = UTC+0 (`utils/time.ts`, `LOCAL_OFFSET_MS`).
 - **Reversements** : Wave, Orange Money ou banque (IBAN/RIB), plus d'UPI/IFSC. Coupons : `BIENVENUE` (ancien `VITFIRST` toujours valable), `KRAVEO20`, `KRAVEO50`.
 - **Tests** : `test/setup-env.js` force `PAYMENT_PROVIDER=razorpay`. Certaines suites dont le sujet est la mécanique de l'argent appellent `useLegacyEconomics()` (`test/harness/legacyEconomics.ts`) pour retrouver les petits montants de la première version. Les fixtures partagées ont un plat à 4000 FCFA pour passer les minimums de coupons.
+
+## Architecture modulaire (KRAVEO_SPEC_MODULES.md)
+
+Récapitulatif complet pour le front : `docs/MODULES_RECAP_FRONT.md`. À savoir avant de toucher aux prix, aux promotions ou à la rémunération des livreurs :
+
+- **Registre** : `src/core/modules/` (`module-registry.service.ts` = cache + état effectif parent/dépendances, `module-admin.service.ts` = toggle/réglages/audit, `settings-validation.ts`, `admin-catalogs.service.ts` = zones, promotions, plans, campagnes, bonus). Routes : `src/routes/modulesAdmin.ts` (ADMIN, rate limit `ADMIN_MODULES_WRITE`). Toute écriture est validée, transactionnelle et écrite dans `ModuleAuditLog`.
+- **Moteurs purs** (sans base) : `modules/delivery/delivery-pricing.engine.ts`, `modules/courier/courier-payout.engine.ts`, `modules/marketing/marketing.engine.ts`. Le moteur livreur ne reçoit jamais ce que paie le client ; le marketing s'applique après et n'est jamais appelé par les deux autres. `shared/pricing/pricing.pipeline.ts` les enchaîne.
+- **Mode shadow** (`PRICING_ENGINE_MODE`, désactivé en test) : le calcul historique (`services/pricing.ts` + `utils/validation.ts`) **facture toujours**. `shared/pricing/shadow.ts` rejoue le panier dans le pipeline après la création de la commande, écrit `PricingParityLog` et le snapshot (colonnes `deliveryFee*`, `courierPayout`, `pricingSnapshot` de `Order`/`OrderGroup`, écrit une seule fois). Ne jamais le faire attendre ni échouer une commande. La bascule se décide à 0 écart sur 7 jours.
+- Seed (migration `20261016_modular_platform`) = comportement actuel : `price_per_km` 0, coupons avec leurs vraies règles. Les valeurs monétaires et distances ne s'écrivent jamais en dur dans les moteurs.
+- Budgets, quotas et coins : une seule requête SQL conditionnelle (`promotion-redemption.service.ts`, `loyalty.service.ts`). `User.kraveoCoins` reste le miroir historique du ledger jusqu'à la bascule.
+- Campagnes : `modules/marketing/campaigns/campaign-sender.ts` (circuit séparé du push de commande : une seule livraison par client via `CampaignDelivery`, plafond quotidien, heures silencieuses, `User.marketingOptOut`), tick lancé par `startCampaignMaintenance` dans `index.ts`.
+- Support / avis / statistiques admin : `services/support.ts` (tickets : une personne ne voit que les siens, notes internes réservées aux admins), `services/adminStats.ts` (aperçu en une requête, commandes en direct, inscrits, avis), routes dans `routes/support.ts`. Doc front : `docs/ADMIN_SUPPORT_STATS.md`.
+- Tests : `test/unit/modular_engines.test.ts` (moteurs, validations) et `test/e2e/modular_platform.test.ts` (API admin, atomicité, shadow) et `test/e2e/support_stats.test.ts` (support, avis, aperçu).
 
 ## Architecture
 

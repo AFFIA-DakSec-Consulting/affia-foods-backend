@@ -7,12 +7,12 @@ export const seedTestDatabase = async () => {
   // 1. Seed standard test users
   const student = await prisma.user.upsert({
     where: { phone: '+221 776543210' },
-    update: { name: 'Rahul Sharma', role: Role.STUDENT, hostelBlock: 'Randoulène' },
+    update: { name: 'Rahul Sharma', role: Role.CLIENT, hostelBlock: 'Randoulène' },
     create: {
       id: 'usr-1',
       name: 'Rahul Sharma',
       phone: '+221 776543210',
-      role: Role.STUDENT,
+      role: Role.CLIENT,
       hostelBlock: 'Randoulène',
       kraveoCoins: 30
     }

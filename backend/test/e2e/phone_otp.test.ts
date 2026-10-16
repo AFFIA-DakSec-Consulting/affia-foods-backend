@@ -32,7 +32,7 @@ describe('Phone + code sign-in', () => {
     expect(row.codeHash).not.toContain(sent[0].code);
     const v = await verify(sent[0].code);
     expect(v.status).toBe(200);
-    expect(v.body).toMatchObject({ success: true, isNewUser: true, needsProfile: true, user: { phone: PHONE, role: 'STUDENT' } });
+    expect(v.body).toMatchObject({ success: true, isNewUser: true, needsProfile: true, user: { phone: PHONE, role: 'CLIENT' } });
     expect(typeof v.body.token).toBe('string');
     expect((await request.get('/api/auth/profile').set('Authorization', `Bearer ${v.body.token}`)).status).toBe(200);
     expect([(await verify(sent[0].code)).status, (await verify(sent[0].code)).body.code]).toEqual([400, 'OTP_INVALID']);

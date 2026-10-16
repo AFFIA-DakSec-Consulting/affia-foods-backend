@@ -203,7 +203,7 @@ describe('Order groups: settings, quote, place, pay, refund', () => {
       expect(both.body.data).toMatchObject({ discount: 50, couponCode: 'KRAVEO50', total: 180 + 40 - 50 });
     });
 
-    test('same validation as placing: closed or unapproved restaurant, bad items, bad coupon, duplicates, shape errors; students only', async () => {
+    test('same validation as placing: closed or unapproved restaurant, bad items, bad coupon, duplicates, shape errors; clients only', async () => {
       const c = W.customers[0];
       const [v1, v2] = W.vendors;
       const q = (restaurants: unknown, coupon?: string) => api.quote(c, restaurants, coupon).then((r) => [r.status, r.body.code ?? null]);
@@ -349,7 +349,7 @@ describe('Order groups: settings, quote, place, pay, refund', () => {
       const p = (restaurants: unknown, extra: Record<string, unknown> = {}) => api.placeGroup(c, restaurants, extra).then((r) => [r.status, r.body.code ?? null, r.body.field ?? null]);
       expect(await p([cartOf(v1)])).toEqual([400, 'USE_SINGLE_ORDER', 'restaurants']);
       expect(await p([cartOf(v1), cartOf(v1)])).toEqual([400, 'DUPLICATE_RESTAURANT', 'restaurants']);
-      expect(await p([cartOf(v1), cartOf(v2)], { dropoffHostel: 'Moon Base' })).toEqual([400, 'BAD_REQUEST', 'dropoffHostel']);
+      expect(await p([cartOf(v1), cartOf(v2)], { dropoffHostel: '<b>Moon Base</b>' })).toEqual([400, 'BAD_REQUEST', 'dropoffHostel']);
       expect(await p([cartOf(v1), cartOf(v2)], { dropoffNotes: 'x'.repeat(301) })).toEqual([400, 'BAD_REQUEST', 'dropoffNotes']);
       expect(await p([cartOf(v1), cartOf(v2)], { couponCode: 'N'.repeat(31) })).toEqual([400, 'BAD_REQUEST', 'couponCode']);
       expect(await p([cartOf(v1), cartOf(v2)], { couponCode: 'NOPE' })).toEqual([400, 'COUPON_NOT_APPLICABLE', 'couponCode']);
@@ -369,8 +369,8 @@ describe('Order groups: settings, quote, place, pay, refund', () => {
       expect((await api.raw('d', 'post', '/api/order-groups', W.riders[0].token, {})).status).toBe(403);
       expect((await api.raw('anon', 'post', '/api/order-groups', null, {})).status).toBe(401);
       await prisma.vendor.update({ where: { id: v2.vendorId }, data: { approvalStatus: 'APPROVED' } });
-      // legacy spellings of a drop point are canonicalised like for single orders
-      expect((await api.placeGroup(c, [cartOf(v1), cartOf(v2)], { dropoffHostel: 'randoulene' })).body.data.dropoffHostel).toBe('Randoulène');
+      // the address is free text, kept as typed (spacing cleaned) like for single orders
+      expect((await api.placeGroup(c, [cartOf(v1), cartOf(v2)], { dropoffHostel: '  randoulene ' })).body.data.dropoffHostel).toBe('randoulene');
     });
 
     test('idempotent by clientRequestId: same cart = 200 replay (same ids), different content = 409 CLIENT_REQUEST_MISMATCH, concurrent duplicates make one group', async () => {

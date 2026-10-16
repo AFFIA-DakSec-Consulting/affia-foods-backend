@@ -165,7 +165,7 @@ async function main() {
 
   // Customers (they sign in with Google; these rows give the orders their customers)
   for (const c of CUSTOMERS) {
-    const data = { name: c.name, phone: c.phone, email: c.email, role: Role.STUDENT, hostelBlock: c.quartier, kraveoCoins: c.coins };
+    const data = { name: c.name, phone: c.phone, email: c.email, role: Role.CLIENT, hostelBlock: c.quartier, kraveoCoins: c.coins };
     await prisma.user.upsert({ where: { id: c.id }, update: data, create: { id: c.id, ...data } });
   }
 

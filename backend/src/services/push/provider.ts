@@ -88,7 +88,7 @@ const createFcmProvider = (): PushProvider | null => {
             // while would silently lose pushes. Duplicates are already prevented server-side (PushLog.key).
             // Lock screen shows the real text (it never holds a code or phone); urgent events ask for max heads-up priority.
             // `tag`: a newer push for the same order (a reminder, the next status) replaces the previous banner instead of stacking.
-            notification: { channelId: m.channelId, visibility: 'public', priority: m.priority === 'high' ? 'max' : 'default', tag: `order_${m.data.orderId}` },
+            notification: { channelId: m.channelId, visibility: 'public', priority: m.priority === 'high' ? 'max' : 'default', tag: m.data.campaignId ? `campaign_${m.data.campaignId}` : `order_${m.data.orderId}` },
           },
         });
       },

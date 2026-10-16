@@ -9,7 +9,7 @@ ADD COLUMN     "tokenVersion" INTEGER NOT NULL DEFAULT 0;
 
 -- Accounts deleted before this release were anonymised without a marker: mark them now.
 UPDATE "User" SET "deletedAt" = "updatedAt"
-WHERE "deletedAt" IS NULL AND "name" = 'Deleted user' AND "email" IS NULL AND "googleSub" IS NULL AND "phone" IS NULL AND "role" = 'STUDENT';
+WHERE "deletedAt" IS NULL AND "name" = 'Deleted user' AND "email" IS NULL AND "googleSub" IS NULL AND "phone" IS NULL AND "role" = 'CLIENT';
 
 -- AlterTable: which coupon produced the discount (single use per customer while the order is not cancelled)
 -- and the proof of the delivered gate code (see schema.prisma, Order.otpProof)

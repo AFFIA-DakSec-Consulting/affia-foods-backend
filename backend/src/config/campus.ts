@@ -23,24 +23,9 @@ const point = (name: string, group: DropPointGroup, dLat: number, dLng: number):
 });
 
 /** Display / list order is exactly this order. */
-export const DROP_POINTS: readonly DropPoint[] = Object.freeze([
-  point('Escale', 'centre', 0, 0),
-  point('Médina Fall', 'centre', 0.004, -0.006),
-  point('Grand Thiès', 'centre', 0.003, -0.011),
-  point('Cité Ndiaye', 'centre', 0.005, 0.006),
-  point('Dixième', 'centre', 0.002, 0.012),
-  point('Randoulène', 'nord', 0.012, 0.004),
-  point('Thiès Nord', 'nord', 0.018, -0.002),
-  point('Parcelles Assainies', 'nord', 0.015, 0.012),
-  point('Keur Mame El Hadji', 'nord', 0.008, -0.014),
-  point('Cité Lamy', 'sud', -0.004, 0.008),
-  point('Thiès Sud', 'sud', -0.012, -0.003),
-  point('Nguinth', 'sud', -0.01, 0.009),
-  point('Mbour 1', 'sud', -0.006, 0.016),
-  point('Diakhao', 'sud', -0.016, -0.012),
-]);
+export const DROP_POINTS: readonly DropPoint[] = Object.freeze([]);
 
-export const DROP_POINT_NAMES: readonly string[] = DROP_POINTS.map((p) => p.name);
+export const DROP_POINT_NAMES: readonly string[] = [];
 
 /** Lower case, no accents, single spaces and no hyphens: `Thiès-Nord`, `thies nord` and `THIES  NORD` are the same quartier. */
 const fold = (s: string): string =>
@@ -49,29 +34,34 @@ const fold = (s: string): string =>
 const BY_FOLDED = new Map(DROP_POINTS.map((p) => [fold(p.name), p.name] as const));
 
 /** Arithmetic mean of the distinct pins (not of the names, so shared pins do not count twice). */
-export const CAMPUS_CENTER: { lat: number; lng: number } = (() => {
-  const distinct = new Map<string, DropPoint>();
-  for (const p of DROP_POINTS) distinct.set(`${p.lat},${p.lng}`, p);
-  const pins = [...distinct.values()];
-  return {
-    lat: pins.reduce((s, p) => s + p.lat, 0) / pins.length,
-    lng: pins.reduce((s, p) => s + p.lng, 0) / pins.length,
-  };
-})();
-
-/** Locations further than this from the centre are rejected for restaurants (the delivery zone of Thies). */
-export const NEAR_CAMPUS_KM = 8;
+export const CAMPUS_CENTER: { lat: number; lng: number } = THIES_CENTER;
 
 /**
- * Canonical quartier name for any accepted spelling, or null.
- * Accepts the canonical names ignoring case, accents, hyphens and extra spaces (`thies nord`, `RANDOULENE`, `Cite-Lamy`).
+ * The product serves all of Senegal. This box (a little generous: it also covers slivers of the neighbouring countries) only stops
+ * nonsense such as a pin in the ocean, in another country or at 0,0. Where the app is really available is decided by the
+ * "service areas" module (services/serviceAreas.ts), which can narrow it down on purpose.
+ */
+export const SENEGAL_BOUNDS = Object.freeze({ minLat: 12.2, maxLat: 16.8, minLng: -17.7, maxLng: -11.3 });
+
+/** Longest address text accepted (a street, a landmark, a quartier). */
+export const MAX_ADDRESS_LENGTH = 200;
+const FORBIDDEN_ADDRESS_CHARS = /[\u0000-\u001f\u007f<>]/;
+
+/**
+ * Delivery address text. The customer chooses a saved address, a recent one or types a one-off address, so any readable text is
+ * accepted (2 to 200 characters, single spaces); a known quartier written in another spelling is normalised to its canonical name.
+ * Control characters (new lines, NUL...) and `<` `>` are refused: the text is shown in the apps and the dashboard. null = refused.
  */
 export function normalizeDropPoint(raw: unknown): string | null {
   if (typeof raw !== 'string') return null;
-  const s = fold(raw);
-  if (!s || s.length > 40) return null;
-  return BY_FOLDED.get(s) ?? null;
+  const s = raw.trim().replace(/[ \t]+/g, ' ');
+  if (s.length < 2 || s.length > MAX_ADDRESS_LENGTH || FORBIDDEN_ADDRESS_CHARS.test(s)) return null;
+  return BY_FOLDED.get(fold(s)) ?? s;
 }
+
+/** True for a usable GPS pin (finite, in range). Both coordinates or none. */
+export const validPin = (lat: unknown, lng: unknown): lat is number =>
+  typeof lat === 'number' && typeof lng === 'number' && Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
 
 /** Coordinates of a drop point (any accepted spelling), or null when the name is not a drop point. */
 export function dropPointCoords(name: unknown): { lat: number; lng: number } | null {
@@ -81,11 +71,16 @@ export function dropPointCoords(name: unknown): { lat: number; lng: number } | n
   return p ? { lat: p.lat, lng: p.lng } : null;
 }
 
-/** `{ name, lat, lng }` for OrderView, or null when the stored text is not a drop point (very old data). */
-export function dropoffView(stored: unknown): { name: string; lat: number; lng: number } | null {
+/**
+ * `{ name, lat, lng }` for OrderView: the pin saved with the order when the customer gave one, else the pin of a known quartier;
+ * null when the address has no coordinates at all (text only).
+ */
+export function dropoffView(stored: unknown, lat?: unknown, lng?: unknown): { name: string; lat: number; lng: number } | null {
   const canonical = normalizeDropPoint(stored);
-  const coords = canonical ? dropPointCoords(canonical) : null;
-  return canonical && coords ? { name: canonical, ...coords } : null;
+  if (!canonical) return null;
+  if (validPin(lat, lng)) return { name: canonical, lat: lat as number, lng: lng as number };
+  const coords = dropPointCoords(canonical);
+  return coords ? { name: canonical, ...coords } : null;
 }
 
 const toRad = (deg: number) => (deg * Math.PI) / 180;
@@ -98,11 +93,11 @@ export function distanceKm(a: { lat: number; lng: number }, b: { lat: number; ln
   return 2 * 6371.0088 * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
-/** True when the point is a valid coordinate within the delivery zone (NEAR_CAMPUS_KM of the centre of Thies). */
-export function isNearCampus(lat: unknown, lng: unknown): boolean {
+/** True when the point is a real coordinate inside the box of Senegal. */
+export function inSenegal(lat: unknown, lng: unknown): boolean {
   if (typeof lat !== 'number' || typeof lng !== 'number' || !Number.isFinite(lat) || !Number.isFinite(lng)) return false;
-  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return false;
-  return distanceKm(CAMPUS_CENTER, { lat, lng }) <= NEAR_CAMPUS_KM;
+  const b = SENEGAL_BOUNDS;
+  return lat >= b.minLat && lat <= b.maxLat && lng >= b.minLng && lng <= b.maxLng;
 }
 
 /** The pin every restaurant got before it had a real one (schema default). */
@@ -117,10 +112,10 @@ export function vendorHasLocation(lat: unknown, lng: unknown): boolean {
 
 export type LocationCheck = { ok: true; lat: number; lng: number } | { ok: false; field: 'lat' | 'lng' | 'location'; message: string };
 
-/** Validates a restaurant pin from untrusted input: numbers (not strings), real ranges, and on campus. */
+/** Validates a restaurant pin from untrusted input: numbers (not strings), real ranges, and inside Senegal. The service-area rule comes on top (checkVendorPin). */
 export function checkVendorLocation(lat: unknown, lng: unknown): LocationCheck {
   if (typeof lat !== 'number' || !Number.isFinite(lat) || lat < -90 || lat > 90) return { ok: false, field: 'lat', message: 'Latitude must be a number between -90 and 90.' };
   if (typeof lng !== 'number' || !Number.isFinite(lng) || lng < -180 || lng > 180) return { ok: false, field: 'lng', message: 'Longitude must be a number between -180 and 180.' };
-  if (!isNearCampus(lat, lng)) return { ok: false, field: 'location', message: `The location must be within ${NEAR_CAMPUS_KM} km of the centre of ${CITY_NAME}.` };
+  if (!inSenegal(lat, lng)) return { ok: false, field: 'location', message: 'The location must be inside Senegal.' };
   return { ok: true, lat, lng };
 }

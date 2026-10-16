@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 import { apiRouter } from './routes/api';
 import { attachRealtime } from './realtime';
 import { startOrderMaintenance } from './services/orderMaintenance';
+import { startCampaignMaintenance } from './modules/marketing/campaigns/campaign-sender';
 import { securityHeaders } from './middleware/securityHeaders';
 import { globalErrorHandler } from './middleware/errorHandler';
 import { assertRuntimeConfig } from './config/runtimeConfig';
@@ -120,5 +121,5 @@ server.listen(PORT, () => {
   console.log(`📡 WebSockets listening for real-time driver tracking & order alerts`);
   // Order housekeeping every 60 s: expire unpaid orders, auto-cancel unaccepted paid orders, retry refunds.
   // Started only once the port is really ours.
-  if (process.env.NODE_ENV !== 'test') startOrderMaintenance();
+  if (process.env.NODE_ENV !== 'test') { startOrderMaintenance(); startCampaignMaintenance(); }
 });

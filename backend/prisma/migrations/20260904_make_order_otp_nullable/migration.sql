@@ -1,5 +1,5 @@
 -- CreateEnum
-CREATE TYPE "Role" AS ENUM ('STUDENT', 'VENDOR', 'DRIVER', 'ADMIN');
+CREATE TYPE "Role" AS ENUM ('CLIENT', 'VENDOR', 'DRIVER', 'ADMIN');
 
 -- CreateEnum
 CREATE TYPE "OrderStatus" AS ENUM ('PLACED', 'ACCEPTED', 'PREPARING', 'READY_FOR_PICKUP', 'PICKED_UP', 'ARRIVED_AT_GATE', 'DELIVERED', 'CANCELLED');
@@ -15,7 +15,7 @@ CREATE TABLE "User" (
     "id" TEXT NOT NULL,
     "phone" TEXT NOT NULL,
     "name" TEXT NOT NULL,
-    "role" "Role" NOT NULL DEFAULT 'STUDENT',
+    "role" "Role" NOT NULL DEFAULT 'CLIENT',
     "hostelBlock" TEXT DEFAULT 'Boys Hostel Block 1',
     "kraveoCoins" INTEGER NOT NULL DEFAULT 0,
     "upiId" TEXT,

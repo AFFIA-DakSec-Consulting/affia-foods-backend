@@ -45,7 +45,7 @@ describe('Order groups: push and stress', () => {
     await prisma.deviceToken.deleteMany({});
     owner.clear();
     for (const p of [...W.customers, ...W.vendors, ...W.riders]) {
-      const app = p.role === 'STUDENT' ? 'CUSTOMER' : p.role === 'VENDOR' ? 'VENDOR' : 'DRIVER';
+      const app = p.role === 'CLIENT' ? 'CUSTOMER' : p.role === 'VENDOR' ? 'VENDOR' : 'DRIVER';
       await prisma.deviceToken.create({ data: { userId: p.id, token: tok(p), app } });
       owner.set(tok(p), p.id);
     }

@@ -8,7 +8,7 @@ import supertest from 'supertest';
 import { Role } from '@prisma/client';
 import { startTestServer, stopTestServer, TestServerInstance } from '../harness/app';
 import { prisma, seedTestDatabase, cleanTestOrders, cleanTestUsers } from '../harness/db';
-import { getStudentToken, getVendorToken, getDriverToken, getAdminToken, getAuthHeader } from '../harness/auth';
+import { getClientToken, getVendorToken, getDriverToken, getAdminToken, getAuthHeader } from '../harness/auth';
 import { setPaymentProvider, createSimulatedProvider } from '../../src/services/paymentService';
 import { runOrderMaintenance } from '../../src/services/orderMaintenance';
 import { __waitForBackgroundWork } from '../../src/services/refundService';
@@ -27,17 +27,17 @@ afterAll(() => restoreEconomics());
 
 jest.setTimeout(30_000);
 
-const STUDENT = { id: 'usr-1', phone: '+221 776543210' };
-const STUDENT2 = { id: 'usr-push-stu2', phone: '+221 779851111' };
-const STUDENT3 = { id: 'usr-push-stu3', phone: '+221 779851112' };
+const CLIENT = { id: 'usr-1', phone: '+221 776543210' };
+const CLIENT2 = { id: 'usr-push-stu2', phone: '+221 779851111' };
+const CLIENT3 = { id: 'usr-push-stu3', phone: '+221 779851112' };
 const VENDOR = { id: 'usr-3', phone: '+221 776543212' };
 const RIDER = { id: 'usr-4', phone: '+221 776543213' };
 const RIDER2 = { id: 'usr-push-rid2', phone: '+221 779852222' };
 const ADMIN = { id: 'usr-5', phone: '+221 776543214' };
 
-const tStudent = getStudentToken(STUDENT.id, STUDENT.phone);
-const tStudent2 = getStudentToken(STUDENT2.id, STUDENT2.phone);
-const tStudent3 = getStudentToken(STUDENT3.id, STUDENT3.phone);
+const tClient = getClientToken(CLIENT.id, CLIENT.phone);
+const tClient2 = getClientToken(CLIENT2.id, CLIENT2.phone);
+const tClient3 = getClientToken(CLIENT3.id, CLIENT3.phone);
 const tVendor = getVendorToken(VENDOR.id, VENDOR.phone);
 const tRider = getDriverToken(RIDER.id, RIDER.phone);
 const tRider2 = getDriverToken(RIDER2.id, RIDER2.phone);
@@ -85,30 +85,30 @@ describe('Push notifications', () => {
   const secrets = { otps: new Set<string>() };
 
   // ---------------- helpers ----------------
-  const place = (token = tStudent, extra: Record<string, unknown> = {}) =>
+  const place = (token = tClient, extra: Record<string, unknown> = {}) =>
     request.post('/api/orders').set(H(token)).send({
       vendorId: 'ven-1', items: [{ itemId: 'item-1', quantity: 1 }, { itemId: 'item-2', quantity: 2 }], dropoffHostel: 'Cité Lamy', dropoffNotes: 'Room 214, call 9876501234', clientRequestId: randomUUID(), ...extra,
     });
-  const createPayment = (orderId: string, token = tStudent) => request.post('/api/payments/create-order').set(H(token)).send({ orderId });
-  const verify = (rzpOrderId: string, token = tStudent) =>
+  const createPayment = (orderId: string, token = tClient) => request.post('/api/payments/create-order').set(H(token)).send({ orderId });
+  const verify = (rzpOrderId: string, token = tClient) =>
     request.post('/api/payments/verify-signature').set(H(token)).send({ razorpayOrderId: rzpOrderId, razorpayPaymentId: `pay_${randomUUID().slice(0, 12)}`, razorpaySignature: 'sim' });
   const setStatus = (id: string, status: string, token: string, extra: object = {}) => request.patch(`/api/orders/${id}/status`).set(H(token)).send({ status, ...extra });
   const claim = (id: string, token = tRider) => request.post(`/api/orders/${id}/accept-driver`).set(H(token)).send({});
   const flush = async () => { await __waitForPushWork(); await __waitForBackgroundWork(); await __waitForPushWork(); };
 
-  const placeOnly = async (token = tStudent) => {
+  const placeOnly = async (token = tClient) => {
     const placed = await place(token);
     expect(placed.status).toBe(201);
     return placed.body.data.id as string;
   };
-  const payOrder = async (orderId: string, token = tStudent) => {
+  const payOrder = async (orderId: string, token = tClient) => {
     const pay = await createPayment(orderId, token);
     expect(pay.status).toBe(200);
     const v = await verify(pay.body.razorpayOrderId, token);
     expect(v.status).toBe(200);
     return v;
   };
-  const placePaid = async (token = tStudent) => {
+  const placePaid = async (token = tClient) => {
     const id = await placeOnly(token);
     await payOrder(id, token);
     await flush();
@@ -118,7 +118,7 @@ describe('Push notifications', () => {
   const logOf = (orderId: string, event: string) => prisma.pushLog.findMany({ where: { orderId, event } });
   const registerAll = async () => {
     const mk = (userId: string, token: string, app: string) => prisma.deviceToken.create({ data: { userId, token, app } });
-    await mk(STUDENT.id, TOK.cust, 'CUSTOMER');
+    await mk(CLIENT.id, TOK.cust, 'CUSTOMER');
     await mk(VENDOR.id, TOK.vendor, 'VENDOR');
     await mk(RIDER.id, TOK.rider, 'DRIVER');
     await mk(RIDER2.id, TOK.rider2, 'DRIVER');
@@ -129,8 +129,8 @@ describe('Push notifications', () => {
     await cleanTestUsers();
     await seedTestDatabase();
     for (const u of [
-      { id: STUDENT2.id, name: 'Priya Nair', phone: STUDENT2.phone, role: Role.STUDENT },
-      { id: STUDENT3.id, name: 'Dev Patel', phone: STUDENT3.phone, role: Role.STUDENT },
+      { id: CLIENT2.id, name: 'Priya Nair', phone: CLIENT2.phone, role: Role.CLIENT },
+      { id: CLIENT3.id, name: 'Dev Patel', phone: CLIENT3.phone, role: Role.CLIENT },
       { id: RIDER2.id, name: 'Arjun Rider', phone: RIDER2.phone, role: Role.DRIVER },
     ]) await prisma.user.upsert({ where: { id: u.id }, update: u, create: u });
     await prisma.driverPartner.upsert({
@@ -138,7 +138,7 @@ describe('Push notifications', () => {
       update: { userId: RIDER2.id, dutyStatus: 'ONLINE', approvalStatus: 'APPROVED' },
       create: { id: 'dp-push-rid2', userId: RIDER2.id, name: 'Arjun Rider', phone: RIDER2.phone, runnerCode: 'RUN-PUSH2', vehicleType: 'Bike', dutyStatus: 'ONLINE' },
     });
-    await prisma.user.update({ where: { id: STUDENT.id }, data: { name: 'Rahul Sharma', phone: STUDENT.phone, hostelBlock: 'Randoulène' } });
+    await prisma.user.update({ where: { id: CLIENT.id }, data: { name: 'Rahul Sharma', phone: CLIENT.phone, hostelBlock: 'Randoulène' } });
     server = await startTestServer(0);
     request = supertest(server.app);
   });
@@ -174,7 +174,7 @@ describe('Push notifications', () => {
     await prisma.deviceToken.deleteMany({});
     await prisma.driverPartner.deleteMany({ where: { id: 'dp-push-rid2' } });
     await cleanTestOrders();
-    await prisma.user.deleteMany({ where: { id: { in: [STUDENT3.id] } } });
+    await prisma.user.deleteMany({ where: { id: { in: [CLIENT3.id] } } });
     await cleanTestUsers();
     await stopTestServer(server);
     await prisma.$disconnect();
@@ -188,21 +188,21 @@ describe('Push notifications', () => {
     const T = 'fcm_token_for_register_0123456789';
 
     test('registers a token for the caller; the user id never comes from the body', async () => {
-      const r = await reg(tStudent, { token: T, app: 'CUSTOMER', platform: 'android', appVersion: '1.5.0+9', userId: 'someone-else' });
+      const r = await reg(tClient, { token: T, app: 'CUSTOMER', platform: 'android', appVersion: '1.5.0+9', userId: 'someone-else' });
       expect(r.status).toBe(200);
       expect(r.body).toEqual({ success: true });
       const row = await prisma.deviceToken.findUniqueOrThrow({ where: { token: T } });
-      expect(row).toMatchObject({ userId: STUDENT.id, app: 'CUSTOMER', platform: 'android', appVersion: '1.5.0+9', disabledAt: null });
+      expect(row).toMatchObject({ userId: CLIENT.id, app: 'CUSTOMER', platform: 'android', appVersion: '1.5.0+9', disabledAt: null });
       // platform and appVersion are optional
       expect((await reg(tVendor, { token: `${T}_v`, app: 'VENDOR' })).status).toBe(200);
       expect((await prisma.deviceToken.findUniqueOrThrow({ where: { token: `${T}_v` } })).appVersion).toBeNull();
     });
 
     test('the same token twice is one row; lastSeenAt moves forward', async () => {
-      await reg(tStudent, { token: T, app: 'CUSTOMER' });
+      await reg(tClient, { token: T, app: 'CUSTOMER' });
       const first = await prisma.deviceToken.findUniqueOrThrow({ where: { token: T } });
       await sleep(5);
-      expect((await reg(tStudent, { token: T, app: 'CUSTOMER' })).status).toBe(200);
+      expect((await reg(tClient, { token: T, app: 'CUSTOMER' })).status).toBe(200);
       expect(await prisma.deviceToken.count({ where: { token: T } })).toBe(1);
       expect((await prisma.deviceToken.findUniqueOrThrow({ where: { token: T } })).lastSeenAt.getTime()).toBeGreaterThan(first.lastSeenAt.getTime());
     });
@@ -221,7 +221,7 @@ describe('Push notifications', () => {
         [{ token: T, app: 'CUSTOMER', appVersion: 5 }, 'appVersion'],
       ];
       for (const [body, field] of cases) {
-        const r = await reg(tStudent, body);
+        const r = await reg(tClient, body);
         expect([r.status, r.body.field]).toEqual([400, field]);
       }
       expect(await prisma.deviceToken.count()).toBe(0);
@@ -230,7 +230,7 @@ describe('Push notifications', () => {
     });
 
     test('the app must match the role: 403 ROLE_NOT_ALLOWED (customer as vendor, rider as customer, admin never)', async () => {
-      for (const [tok, app] of [[tStudent, 'VENDOR'], [tStudent, 'DRIVER'], [tVendor, 'CUSTOMER'], [tRider, 'VENDOR'], [tAdmin, 'CUSTOMER'], [tAdmin, 'VENDOR']] as const) {
+      for (const [tok, app] of [[tClient, 'VENDOR'], [tClient, 'DRIVER'], [tVendor, 'CUSTOMER'], [tRider, 'VENDOR'], [tAdmin, 'CUSTOMER'], [tAdmin, 'VENDOR']] as const) {
         const r = await reg(tok, { token: T, app });
         expect([r.status, r.body.code]).toEqual([403, 'ROLE_NOT_ALLOWED']);
       }
@@ -239,21 +239,21 @@ describe('Push notifications', () => {
     });
 
     test('a token moves to the new user on a shared phone and is re-enabled', async () => {
-      await reg(tStudent, { token: T, app: 'CUSTOMER' });
+      await reg(tClient, { token: T, app: 'CUSTOMER' });
       await prisma.deviceToken.update({ where: { token: T }, data: { disabledAt: new Date(), disabledReason: 'LOGOUT' } });
-      expect((await reg(tStudent2, { token: T, app: 'CUSTOMER' })).status).toBe(200);
+      expect((await reg(tClient2, { token: T, app: 'CUSTOMER' })).status).toBe(200);
       const row = await prisma.deviceToken.findUniqueOrThrow({ where: { token: T } });
-      expect(row).toMatchObject({ userId: STUDENT2.id, disabledAt: null, disabledReason: null });
+      expect(row).toMatchObject({ userId: CLIENT2.id, disabledAt: null, disabledReason: null });
       expect(await prisma.deviceToken.count({ where: { token: T } })).toBe(1);
     });
 
     test('at most 10 active tokens per user: the oldest are disabled', async () => {
       const tokens = Array.from({ length: 12 }, (_, i) => `limit_token_number_${String(i).padStart(2, '0')}_xxxxxxxx`);
       for (const t of tokens) {
-        expect((await reg(tStudent, { token: t, app: 'CUSTOMER' })).status).toBe(200);
+        expect((await reg(tClient, { token: t, app: 'CUSTOMER' })).status).toBe(200);
         await sleep(4);
       }
-      const rows = await prisma.deviceToken.findMany({ where: { userId: STUDENT.id } });
+      const rows = await prisma.deviceToken.findMany({ where: { userId: CLIENT.id } });
       expect(rows.filter((r) => !r.disabledAt)).toHaveLength(10);
       const off = rows.filter((r) => r.disabledAt).map((r) => r.token).sort();
       expect(off).toEqual([tokens[0], tokens[1]]);
@@ -262,28 +262,28 @@ describe('Push notifications', () => {
     });
 
     test('DELETE: the owner switches the token off; others and unknown tokens are a quiet success', async () => {
-      await reg(tStudent, { token: T, app: 'CUSTOMER' });
+      await reg(tClient, { token: T, app: 'CUSTOMER' });
       // someone else cannot remove it (still 200, nothing changes)
-      expect((await request.delete('/api/devices').set(H(tStudent2)).send({ token: T })).body).toEqual({ success: true });
+      expect((await request.delete('/api/devices').set(H(tClient2)).send({ token: T })).body).toEqual({ success: true });
       expect((await prisma.deviceToken.findUniqueOrThrow({ where: { token: T } })).disabledAt).toBeNull();
       // the owner can, twice
-      expect((await request.delete('/api/devices').set(H(tStudent)).send({ token: T })).status).toBe(200);
+      expect((await request.delete('/api/devices').set(H(tClient)).send({ token: T })).status).toBe(200);
       const row = await prisma.deviceToken.findUniqueOrThrow({ where: { token: T } });
       expect(row.disabledAt).not.toBeNull();
       expect(row.disabledReason).toBe('LOGOUT');
-      expect((await request.delete('/api/devices').set(H(tStudent)).send({ token: T })).status).toBe(200);
+      expect((await request.delete('/api/devices').set(H(tClient)).send({ token: T })).status).toBe(200);
       // unknown token, malformed token
-      expect((await request.delete('/api/devices').set(H(tStudent)).send({ token: 'unknown_token_0123456789abcdef' })).body).toEqual({ success: true });
-      expect((await request.delete('/api/devices').set(H(tStudent)).send({})).status).toBe(400);
+      expect((await request.delete('/api/devices').set(H(tClient)).send({ token: 'unknown_token_0123456789abcdef' })).body).toEqual({ success: true });
+      expect((await request.delete('/api/devices').set(H(tClient)).send({})).status).toBe(400);
     });
 
     test('rate limited like the other write routes (RL_DEVICE_WRITE_MAX)', async () => {
       process.env.RL_DEVICE_WRITE_MAX = '3';
       __resetRateLimits();
-      for (let i = 0; i < 3; i++) expect((await reg(tStudent, { token: T, app: 'CUSTOMER' })).status).toBe(200);
-      const r = await reg(tStudent, { token: T, app: 'CUSTOMER' });
+      for (let i = 0; i < 3; i++) expect((await reg(tClient, { token: T, app: 'CUSTOMER' })).status).toBe(200);
+      const r = await reg(tClient, { token: T, app: 'CUSTOMER' });
       expect([r.status, r.body.code]).toEqual([429, 'RATE_LIMITED']);
-      expect((await reg(tStudent2, { token: `${T}_2`, app: 'CUSTOMER' })).status).toBe(200); // per user
+      expect((await reg(tClient2, { token: `${T}_2`, app: 'CUSTOMER' })).status).toBe(200); // per user
     });
   });
 
@@ -378,7 +378,7 @@ describe('Push notifications', () => {
       await registerAll();
       // RIDER2 is busy with another order, so only RIDER hears about the new pool order.
       const other = await prisma.order.create({
-        data: { customerId: STUDENT2.id, vendorId: 'ven-1', driverId: RIDER2.id, totalAmount: 100, dropoffHostel: 'Médina Fall', status: 'PICKED_UP', paymentStatus: 'PAID', paidAt: new Date() },
+        data: { customerId: CLIENT2.id, vendorId: 'ven-1', driverId: RIDER2.id, totalAmount: 100, dropoffHostel: 'Médina Fall', status: 'PICKED_UP', paymentStatus: 'PAID', paidAt: new Date() },
       });
       const id = await placePaid();
       for (const s of ['ACCEPTED', 'PREPARING', 'READY_FOR_PICKUP']) expect((await setStatus(id, s, tVendor)).status).toBe(200);
@@ -410,7 +410,7 @@ describe('Push notifications', () => {
     test('customer cancels a paid order: no self-push, restaurant told, then REFUND_PROCESSED', async () => {
       await registerAll();
       const id = await placePaid();
-      const r = await request.post(`/api/orders/${id}/cancel`).set(H(tStudent)).send({ reason: 'Changed my mind' });
+      const r = await request.post(`/api/orders/${id}/cancel`).set(H(tClient)).send({ reason: 'Changed my mind' });
       expect(r.status).toBe(200);
       await flush();
       // The customer who pressed Cancel is not pushed about it (they know); the refund push still follows.
@@ -432,7 +432,7 @@ describe('Push notifications', () => {
     test('an unpaid order the customer cancels: nobody is pushed (customer knows, restaurant never saw it)', async () => {
       await registerAll();
       const id = await placeOnly();
-      expect((await request.post(`/api/orders/${id}/cancel`).set(H(tStudent)).send({})).status).toBe(200);
+      expect((await request.post(`/api/orders/${id}/cancel`).set(H(tClient)).send({})).status).toBe(200);
       await flush();
       expect(fake.events(id)).toEqual([]);
     });
@@ -499,9 +499,9 @@ describe('Push notifications', () => {
 
     test('a user with two devices gets the push on both; a device of another app is never used', async () => {
       await registerAll();
-      await prisma.deviceToken.create({ data: { userId: STUDENT.id, token: TOK.custB, app: 'CUSTOMER' } });
+      await prisma.deviceToken.create({ data: { userId: CLIENT.id, token: TOK.custB, app: 'CUSTOMER' } });
       // a token the customer account holds for another app must not receive customer pushes
-      await prisma.deviceToken.create({ data: { userId: STUDENT.id, token: 'wrong_app_token_0123456789abcdef', app: 'VENDOR' } });
+      await prisma.deviceToken.create({ data: { userId: CLIENT.id, token: 'wrong_app_token_0123456789abcdef', app: 'VENDOR' } });
       const id = await placePaid();
       expect((await setStatus(id, 'ACCEPTED', tVendor)).status).toBe(200);
       await flush();
@@ -624,7 +624,7 @@ describe('Push notifications', () => {
         await prisma.pushLog.deleteMany({});
         await prisma.deviceToken.deleteMany({});
         await registerAll();
-        await prisma.deviceToken.create({ data: { userId: STUDENT.id, token: TOK.custB, app: 'CUSTOMER' } });
+        await prisma.deviceToken.create({ data: { userId: CLIENT.id, token: TOK.custB, app: 'CUSTOMER' } });
         fake.sent.length = 0;
         fake.behaviour = (m) => { if (m.token === TOK.cust) throw (code.endsWith(':token') ? fcmError('messaging/invalid-argument', 'The registration token is not a valid FCM registration token') : fcmError(code)); };
         const id = await placePaid();
@@ -668,20 +668,20 @@ describe('Push notifications', () => {
 
     test('a user without any active device is SKIPPED and the provider is not called for them', async () => {
       await prisma.deviceToken.create({ data: { userId: VENDOR.id, token: TOK.vendor, app: 'VENDOR' } });
-      await prisma.deviceToken.create({ data: { userId: STUDENT.id, token: TOK.cust, app: 'CUSTOMER', disabledAt: new Date(), disabledReason: 'LOGOUT' } });
+      await prisma.deviceToken.create({ data: { userId: CLIENT.id, token: TOK.cust, app: 'CUSTOMER', disabledAt: new Date(), disabledReason: 'LOGOUT' } });
       const id = await placePaid();
       expect((await setStatus(id, 'ACCEPTED', tVendor)).status).toBe(200);
       await flush();
-      expect(await logOf(id, 'ORDER_ACCEPTED')).toEqual([expect.objectContaining({ status: 'SKIPPED', attempts: 0, userId: STUDENT.id })]);
+      expect(await logOf(id, 'ORDER_ACCEPTED')).toEqual([expect.objectContaining({ status: 'SKIPPED', attempts: 0, userId: CLIENT.id })]);
       expect(fake.sent.map((m) => m.token)).toEqual([TOK.vendor]);
     });
 
     test('a logged-out device (DELETE /devices) gets nothing more', async () => {
-      await request.post('/api/devices').set(H(tStudent)).send({ token: TOK.cust, app: 'CUSTOMER' });
+      await request.post('/api/devices').set(H(tClient)).send({ token: TOK.cust, app: 'CUSTOMER' });
       await request.post('/api/devices').set(H(tVendor)).send({ token: TOK.vendor, app: 'VENDOR' });
       const id = await placePaid();
       expect(fake.to(id, 'NEW_ORDER')).toHaveLength(1);
-      await request.delete('/api/devices').set(H(tStudent)).send({ token: TOK.cust });
+      await request.delete('/api/devices').set(H(tClient)).send({ token: TOK.cust });
       expect((await setStatus(id, 'ACCEPTED', tVendor)).status).toBe(200);
       await flush();
       expect(fake.to(id, 'ORDER_ACCEPTED')).toHaveLength(0);
@@ -733,11 +733,11 @@ describe('Push notifications', () => {
     });
 
     test('deleting the account disables its devices', async () => {
-      await prisma.deviceToken.create({ data: { userId: STUDENT3.id, token: 'deleted_user_token_0123456789ab', app: 'CUSTOMER' } });
-      const r = await request.delete('/api/auth/account').set(H(tStudent3));
+      await prisma.deviceToken.create({ data: { userId: CLIENT3.id, token: 'deleted_user_token_0123456789ab', app: 'CUSTOMER' } });
+      const r = await request.delete('/api/auth/account').set(H(tClient3));
       expect(r.status).toBe(200);
       expect(await prisma.deviceToken.findUniqueOrThrow({ where: { token: 'deleted_user_token_0123456789ab' } })).toMatchObject({ disabledReason: 'ACCOUNT_DELETED' });
-      await prisma.user.update({ where: { id: STUDENT3.id }, data: { deletedAt: null, name: 'Dev Patel' } }); // keep the fixture reusable
+      await prisma.user.update({ where: { id: CLIENT3.id }, data: { deletedAt: null, name: 'Dev Patel' } }); // keep the fixture reusable
     });
   });
 
@@ -775,7 +775,7 @@ describe('Push notifications', () => {
       expect(done.body.data.status).toBe('DELIVERED');
 
       const id2 = await placePaid();
-      const c = await request.post(`/api/orders/${id2}/cancel`).set(H(tStudent)).send({ reason: 'Changed my mind' });
+      const c = await request.post(`/api/orders/${id2}/cancel`).set(H(tClient)).send({ reason: 'Changed my mind' });
       expect(c.status).toBe(200);
       expect(c.body.data.status).toBe('CANCELLED');
       await flush();
@@ -893,9 +893,9 @@ describe('Push notifications', () => {
         { key: 'new:E:u', orderId: 'new', userId: 'u', event: 'ORDER_READY', status: 'SENT' },
       ] });
       await prisma.deviceToken.createMany({ data: [
-        { userId: STUDENT.id, token: 'old_disabled_token_0123456789abc', app: 'CUSTOMER', disabledAt: new Date(Date.now() - 61 * day), disabledReason: 'LOGOUT' },
-        { userId: STUDENT.id, token: 'recent_disabled_token_0123456789a', app: 'CUSTOMER', disabledAt: new Date(Date.now() - 30 * day), disabledReason: 'LOGOUT' },
-        { userId: STUDENT.id, token: 'active_old_token_0123456789abcde', app: 'CUSTOMER', createdAt: new Date(Date.now() - 400 * day) },
+        { userId: CLIENT.id, token: 'old_disabled_token_0123456789abc', app: 'CUSTOMER', disabledAt: new Date(Date.now() - 61 * day), disabledReason: 'LOGOUT' },
+        { userId: CLIENT.id, token: 'recent_disabled_token_0123456789a', app: 'CUSTOMER', disabledAt: new Date(Date.now() - 30 * day), disabledReason: 'LOGOUT' },
+        { userId: CLIENT.id, token: 'active_old_token_0123456789abcde', app: 'CUSTOMER', createdAt: new Date(Date.now() - 400 * day) },
       ] });
       expect(await pruneOldPushData()).toEqual({ logs: 1, tokens: 1 });
       expect((await prisma.pushLog.findMany()).map((r) => r.key)).toEqual(['new:E:u']);
@@ -913,7 +913,7 @@ describe('Push notifications', () => {
       expect([...PUSH_EVENTS].filter((e) => e !== 'NEW_ORDER_REMINDER' && e !== 'GROUP_READY_TO_COOK' && !seen.has(e))).toEqual([]); // a reminder travels as NEW_ORDER (own test); GROUP_READY_TO_COOK is combined-order only (order_groups_review_fixes.test.ts)
       expect(secrets.otps.size).toBeGreaterThan(0);
 
-      const phones = [STUDENT, STUDENT2, STUDENT3, VENDOR, RIDER, RIDER2, ADMIN].map((u) => u.phone.replace(/\D/g, '').slice(-10));
+      const phones = [CLIENT, CLIENT2, CLIENT3, VENDOR, RIDER, RIDER2, ADMIN].map((u) => u.phone.replace(/\D/g, '').slice(-10));
       for (const m of everything) {
         const all = JSON.stringify(m);
         expect(Object.keys(m.data).sort()).toEqual(['event', 'orderId', 'v']);

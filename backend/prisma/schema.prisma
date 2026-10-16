@@ -10,7 +10,7 @@ generator client {
 }
 
 enum Role {
-  STUDENT
+  CLIENT
   VENDOR
   DRIVER
   ADMIN
@@ -55,27 +55,40 @@ enum DutyStatus {
 }
 
 model User {
-  id           String   @id @default(uuid())
-  phone        String?  @unique
-  email        String?  @unique
-  googleSub    String?  @unique
-  passwordHash String?
-  avatarId     Int?
-  isStudent    Boolean?
-  name         String
-  role         Role     @default(STUDENT)
-  hostelBlock  String?
-  kraveoCoins  Int      @default(0)
-  upiId        String?
-  fcmToken     String?
+  id               String          @id @default(uuid())
+  phone            String?         @unique
+  email            String?         @unique
+  googleSub        String?         @unique
+  passwordHash     String?
+  avatarId         Int?
+  isStudent        Boolean?
+  name             String
+  role             Role            @default(CLIENT)
+  hostelBlock      String?
+  kraveoCoins      Int             @default(0)
+  // Marketing consent: true = the customer switched promotional notifications off (order updates are never affected).
+  marketingOptOut  Boolean         @default(false)
+  supportTickets   SupportTicket[]
+  upiId            String?
+  fcmToken         String?
   // Bumped on password reset, suspension and account deletion: JWTs carry `tv` and are refused when it differs.
-  tokenVersion Int      @default(0)
+  tokenVersion     Int             @default(0)
   // Set when the student deletes the account (row is anonymised, kept for order/payment FKs).
-  deletedAt    DateTime?
+  deletedAt        DateTime?
   // How many times 50 coins were exchanged for the KRAVEO20 coupon (each redemption = one use of the code).
-  kraveo20Redeemed Int  @default(0)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  kraveo20Redeemed Int             @default(0)
+  // Back-office team (role ADMIN only). adminRole null = the owner who signs in with the general ADMIN_PASSCODE: full access.
+  adminRole         String?
+  adminPasscodeHash String?
+  adminDisabledAt   DateTime?
+  adminLastLoginAt  DateTime?
+  // Two-step sign-in (authenticator app). The secret is encrypted at rest; backup codes are stored as SHA-256 hashes and used once.
+  adminTotpSecret    String?
+  adminTotpEnabledAt DateTime?
+  adminTotpLastStep  Int?
+  adminBackupCodes   String[] @default([])
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
 
   ordersPlaced    Order[]        @relation("CustomerOrders")
   groupsPlaced    OrderGroup[]   @relation("CustomerGroups")
@@ -86,16 +99,30 @@ model User {
   reviewsReceived ReviewRecord[] @relation("DriverReviews")
   deviceTokens    DeviceToken[]
   payoutAccount   PayoutAccount?
+  addresses       Address[]
+}
+
+model Address {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label     String // e.g., "Maison", "Bureau"
+  address   String // The full address or block
+  isDefault Boolean  @default(false)
+  lat       Float?
+  lng       Float?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Vendor {
-  id                String   @id @default(uuid())
+  id                String         @id @default(uuid())
   userId            String?
   name              String
   category          String
-  rating            Float    @default(4.5)
-  totalRatingsCount Int      @default(50)
-  eta               String   @default("20-25 min")
+  rating            Float          @default(4.5)
+  totalRatingsCount Int            @default(50)
+  eta               String         @default("20-25 min")
   bannerImage       String
   // Docs/24: the restaurant's public profile. All optional; null = not filled in yet.
   logoUrl           String?
@@ -106,9 +133,9 @@ model Vendor {
   // Docs/24: what a rider should know to find / enter the restaurant ("back door", "2nd floor"). Shown to the restaurant and the admin.
   pickupNotes       String?
   address           String
-  isAcceptingOrders Boolean  @default(true)
-  lat               Float    @default(14.7886)
-  lng               Float    @default(-16.926)
+  isAcceptingOrders Boolean        @default(true)
+  lat               Float          @default(14.7886)
+  lng               Float          @default(-16.926)
   // Where the pin came from (Docs/20): DEVICE = the restaurant's own phone, ADMIN = typed by Kraveo, null = never set / legacy.
   locationSource    String?
   locationSetAt     DateTime?
@@ -122,13 +149,13 @@ model Vendor {
   // Docs/21: this restaurant's default commission (PERCENT | FLAT). Both null = inherit the global default.
   commissionType    String?
   commissionValue   Float?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
 
-  user      User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
-  menuItems MenuItem[]
-  orders    Order[]
-  reviews   ReviewRecord[]
+  user        User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  menuItems   MenuItem[]
+  orders      Order[]
+  reviews     ReviewRecord[]
   settlements Settlement[]
 
   @@index([approvalStatus])
@@ -181,7 +208,9 @@ model Order {
   driverId      String?
   totalAmount   Float
   deliveryFee   Float         @default(30.0)
-  dropoffHostel String
+  dropoffHostel String // Kept for backward compatibility, now acts as the address label/text
+  dropoffLat    Float?
+  dropoffLng    Float?
   dropoffNotes  String?
   status        OrderStatus   @default(PLACED)
   paymentStatus PaymentStatus @default(PENDING)
@@ -220,26 +249,36 @@ model Order {
 
   // Docs/21 section 2. `deliveryFee` now holds the ONE all-in fee and `taxAndPackaging` stays 0 for new orders.
   // vendorSubtotal = sum(vendorUnitPrice x qty) (what the restaurant earns), commissionTotal = subtotal - vendorSubtotal.
-  vendorSubtotal   Float     @default(0)
-  commissionTotal  Float     @default(0)
-  feeBreakdown     Json?
+  vendorSubtotal  Float   @default(0)
+  commissionTotal Float   @default(0)
+  feeBreakdown    Json?
   // Docs/21 phase 2: the daily settlement batch this order was paid out in (null = not settled yet). An order belongs to at most
   // one settlement (set by a conditional update); deleting a settlement row frees its orders (ON DELETE SET NULL).
-  settlementId     String?
+  settlementId    String?
 
   // Docs/22 multi-restaurant orders: every child of an OrderGroup is an ordinary order. groupIndex 0 = the PRIMARY child: it carries the
   // one Payment (amount = the group total), the base fee and the coupon code. groupId is immutable once set; groups are never deleted.
-  groupId          String?
-  groupIndex       Int?
+  groupId    String?
+  groupIndex Int?
 
-  customer User          @relation("CustomerOrders", fields: [customerId], references: [id])
-  vendor   Vendor        @relation(fields: [vendorId], references: [id])
-  driver   User?         @relation("DriverOrders", fields: [driverId], references: [id])
-  settlement Settlement? @relation(fields: [settlementId], references: [id], onDelete: SetNull)
-  group    OrderGroup?   @relation(fields: [groupId], references: [id], onDelete: Restrict)
-  items    OrderItem[]
-  payments Payment[]
-  review   ReviewRecord?
+  // Modular pricing snapshot (KRAVEO_SPEC_MODULES.md section 9). Written once at creation (shadow mode), never recomputed. Whole FCFA.
+  deliveryFeeOriginal  Int?
+  deliveryFeeCustomer  Int?
+  courierPayout        Int?
+  deliverySubsidy      Int?
+  merchantContribution Int?
+  promotionId          String?
+  subscriptionId       String?
+  pricingSnapshot      Json?
+
+  customer   User          @relation("CustomerOrders", fields: [customerId], references: [id])
+  vendor     Vendor        @relation(fields: [vendorId], references: [id])
+  driver     User?         @relation("DriverOrders", fields: [driverId], references: [id])
+  settlement Settlement?   @relation(fields: [settlementId], references: [id], onDelete: SetNull)
+  group      OrderGroup?   @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  items      OrderItem[]
+  payments   Payment[]
+  review     ReviewRecord?
 
   @@unique([customerId, clientRequestId])
   @@unique([groupId, groupIndex])
@@ -263,6 +302,8 @@ model OrderGroup {
   // The app's checkout id (unique per customer); the children use the derived ids `g:<clientRequestId>:<index>`.
   clientRequestId String
   dropoffHostel   String
+  dropoffLat      Float?
+  dropoffLng      Float?
   dropoffNotes    String?
   couponCode      String?
   discount        Float    @default(0)
@@ -274,6 +315,16 @@ model OrderGroup {
   feeBreakdown    Json?
   createdAt       DateTime @default(now())
 
+  // Modular pricing snapshot (KRAVEO_SPEC_MODULES.md section 9), same meaning as on Order but for the whole group.
+  deliveryFeeOriginal  Int?
+  deliveryFeeCustomer  Int?
+  courierPayout        Int?
+  deliverySubsidy      Int?
+  merchantContribution Int?
+  promotionId          String?
+  subscriptionId       String?
+  pricingSnapshot      Json?
+
   customer User    @relation("CustomerGroups", fields: [customerId], references: [id])
   orders   Order[]
 
@@ -282,16 +333,16 @@ model OrderGroup {
 }
 
 model OrderItem {
-  id         String  @id @default(uuid())
-  orderId    String
-  menuItemId String?
-  name       String
-  quantity   Int
+  id              String  @id @default(uuid())
+  orderId         String
+  menuItemId      String?
+  name            String
+  quantity        Int
   // The CUSTOMER unit price at order time.
-  price      Float
+  price           Float
   // Snapshots from the dish at order time (Docs/21): what the restaurant earns per unit and what Kraveo keeps per unit.
-  vendorUnitPrice Float @default(0)
-  commissionUnit  Float @default(0)
+  vendorUnitPrice Float   @default(0)
+  commissionUnit  Float   @default(0)
 
   order    Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
   menuItem MenuItem? @relation(fields: [menuItemId], references: [id], onDelete: SetNull)
@@ -300,13 +351,13 @@ model OrderItem {
 }
 
 model Payment {
-  id                String        @id @default(uuid())
-  orderId           String
-  razorpayOrderId   String        @unique
-  razorpayPaymentId String?
-  amount            Float
-  status            PaymentStatus @default(PENDING)
-  createdAt         DateTime      @default(now())
+  id                  String        @id @default(uuid())
+  orderId             String
+  razorpayOrderId     String        @unique
+  razorpayPaymentId   String?
+  amount              Float
+  status              PaymentStatus @default(PENDING)
+  createdAt           DateTime      @default(now())
   // What Razorpay says was captured (paise), the refund that returned it, and when.
   capturedAmountPaise Int?
   // WAVE | ORANGE_MONEY | CASH (null for a payment made through a provider checkout)
@@ -320,29 +371,29 @@ model Payment {
 }
 
 model DriverPartner {
-  id                       String     @id @default(uuid())
-  userId                   String?    @unique
+  id                       String         @id @default(uuid())
+  userId                   String?        @unique
   name                     String
   phone                    String
   studentRegNo             String?
-  runnerCode               String     @unique
+  runnerCode               String         @unique
   avatarUrl                String?
   vehicleType              String
   vehicleRegNo             String?
   emergencyPhone           String?
-  dutyStatus               DutyStatus @default(OFFLINE)
-  ordersToday              Int        @default(0)
-  totalEarningsToday       Float      @default(0.0)
-  avgCompletionTimeMinutes Float      @default(0.0)
-  onTimeRatePercent        Float      @default(100.0)
-  rating                   Float      @default(5.0)
+  dutyStatus               DutyStatus     @default(OFFLINE)
+  ordersToday              Int            @default(0)
+  totalEarningsToday       Float          @default(0.0)
+  avgCompletionTimeMinutes Float          @default(0.0)
+  onTimeRatePercent        Float          @default(100.0)
+  rating                   Float          @default(5.0)
   upiId                    String?
   approvalStatus           ApprovalStatus @default(APPROVED)
   rejectionReason          String?
   appliedAt                DateTime?
   reviewedAt               DateTime?
-  createdAt                DateTime   @default(now())
-  updatedAt                DateTime   @updatedAt
+  createdAt                DateTime       @default(now())
+  updatedAt                DateTime       @updatedAt
 
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
@@ -376,10 +427,19 @@ model ReviewRecord {
   coinsEarned  Int      @default(10)
   createdAt    DateTime @default(now())
 
+  // Moderation: a restaurant or an admin can flag a review; only an admin clears it.
+  flagged    Boolean   @default(false)
+  flagReason String?
+  flaggedBy  String?
+  flaggedAt  DateTime?
+
   order    Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
   customer User   @relation("CustomerReviews", fields: [customerId], references: [id], onDelete: Cascade)
   vendor   Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
   driver   User?  @relation("DriverReviews", fields: [driverId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([flagged])
 }
 
 model DriverLocation {
@@ -554,4 +614,396 @@ model PhoneOtp {
   createdAt  DateTime  @default(now())
 
   @@index([phone, createdAt])
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Modular platform (KRAVEO_SPEC_MODULES.md): module registry, settings, delivery zones, courier payout, marketing.
+// All money is whole FCFA (Int). Every write goes through src/core/modules (validated + audited).
+// ---------------------------------------------------------------------------------------------------------------------
+model PlatformModule {
+  code         String   @id
+  parentCode   String?
+  name         String
+  description  String
+  category     String // delivery | courier | marketing | analytics
+  isEnabled    Boolean  @default(false)
+  isCore       Boolean  @default(false)
+  requires     String[] @default([])
+  requiresMode String   @default("ALL") // ALL | ANY
+  sortOrder    Int      @default(0)
+  updatedBy    String?
+  updatedAt    DateTime @default(now()) @updatedAt
+
+  parent     PlatformModule?  @relation("ModuleTree", fields: [parentCode], references: [code])
+  children   PlatformModule[] @relation("ModuleTree")
+  settings   ModuleSetting[]
+  promotions Promotion[]
+}
+
+model ModuleSetting {
+  id          String   @id @default(uuid())
+  moduleCode  String
+  key         String
+  value       Json
+  valueType   String // number | boolean | string | json | money
+  unit        String?
+  label       String
+  description String
+  minValue    Float?
+  maxValue    Float?
+  // Allowed values of a string setting (for example the payout mode), null = any.
+  options     Json?
+  updatedBy   String?
+  updatedAt   DateTime @default(now()) @updatedAt
+
+  module PlatformModule @relation(fields: [moduleCode], references: [code], onDelete: Cascade)
+
+  @@unique([moduleCode, key])
+}
+
+model ModuleAuditLog {
+  id         String   @id @default(uuid())
+  moduleCode String?
+  settingKey String?
+  action     String // ENABLE | DISABLE | UPDATE_SETTING | UPDATE_ZONE | CREATE_PROMOTION | UPDATE_PROMOTION ...
+  oldValue   Json?
+  newValue   Json?
+  changedBy  String?
+  changedAt  DateTime @default(now())
+
+  @@index([changedAt])
+  @@index([moduleCode, changedAt])
+}
+
+model DeliveryZone {
+  id            String  @id @default(uuid())
+  city          String  @default("default")
+  label         String
+  minKm         Float
+  maxKm         Float? // null = no upper limit
+  fee           Int? // what the customer pays; null = use the base formula
+  courierPayout Int? // what the courier earns for the zone
+  isActive      Boolean @default(true)
+  sortOrder     Int     @default(0)
+
+  @@index([city, sortOrder])
+}
+
+model CourierBonus {
+  id          String  @id @default(uuid())
+  name        String
+  description String
+  triggerType String // RAIN | NIGHT | RUSH_HOUR | ZONE | MANUAL
+  amount      Int
+  conditions  Json?
+  isActive    Boolean @default(true)
+}
+
+model Promotion {
+  id                 String    @id @default(uuid())
+  moduleCode         String
+  name               String
+  description        String
+  code               String?   @unique // null = automatic
+  type               String // FREE_DELIVERY | PERCENT_OFF_DELIVERY | FIXED_OFF_DELIVERY | PERCENT_OFF_CART | FIXED_OFF_CART
+  value              Float?
+  fundedBy           String    @default("PLATFORM") // PLATFORM | MERCHANT | SPLIT
+  merchantSharePct   Float     @default(0)
+  minCartAmount      Int?
+  maxDistanceKm      Float?
+  maxDiscountAmount  Int?
+  eligibleCities     String[]  @default([])
+  eligibleMerchants  String[]  @default([])
+  firstOrderOnly     Boolean   @default(false)
+  coinsCost          Int?
+  requiresRedemption Boolean   @default(false)
+  maxUsesTotal       Int?
+  maxUsesPerUser     Int?      @default(1)
+  budgetTotal        Int?
+  budgetSpent        Int       @default(0)
+  startsAt           DateTime?
+  endsAt             DateTime?
+  isActive           Boolean   @default(true)
+  priority           Int       @default(0)
+  stackable          Boolean   @default(false)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @default(now()) @updatedAt
+
+  module      PlatformModule        @relation(fields: [moduleCode], references: [code])
+  redemptions PromotionRedemption[]
+  campaigns   Campaign[]
+}
+
+model PromotionRedemption {
+  id             String   @id @default(uuid())
+  promotionId    String
+  userId         String
+  orderRef       String // the order group id, or the order id of a single order
+  discountAmount Int
+  platformShare  Int
+  merchantShare  Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  promotion Promotion @relation(fields: [promotionId], references: [id])
+
+  @@unique([promotionId, orderRef])
+  @@index([userId, promotionId])
+}
+
+model LoyaltyRule {
+  id           String  @id @default(uuid())
+  name         String
+  description  String
+  triggerType  String // ORDER_COMPLETED | SIGNUP | REFERRAL | REVIEW
+  coinsAmount  Int?
+  coinsPercent Float?
+  minCart      Int?
+  maxCoins     Int?
+  isActive     Boolean @default(true)
+}
+
+// Append-only ledger. The balance is the SUM of `amount`; User.kraveoCoins stays the legacy mirror until the cut-over.
+model LoyaltyTransaction {
+  id           String   @id @default(uuid())
+  userId       String
+  amount       Int // + earned, - spent
+  reason       String // OPENING | EARNED_ORDER | REDEEMED_COUPON | EXPIRED | ADMIN | REFERRAL
+  orderRef     String?
+  promotionId  String?
+  balanceAfter Int
+  createdAt    DateTime @default(now())
+
+  @@unique([userId, orderRef, reason])
+  @@index([userId, createdAt])
+}
+
+model SubscriptionPlan {
+  id                  String  @id @default(uuid())
+  name                String
+  description         String
+  price               Int
+  durationDays        Int     @default(30)
+  freeDeliveriesQuota Int? // null = unlimited
+  minCartAmount       Int?
+  maxDistanceKm       Float?
+  isActive            Boolean @default(true)
+
+  subscriptions Subscription[]
+}
+
+model Subscription {
+  id             String   @id @default(uuid())
+  userId         String
+  planId         String
+  startsAt       DateTime
+  endsAt         DateTime
+  deliveriesUsed Int      @default(0)
+  status         String   @default("ACTIVE") // ACTIVE | EXPIRED | CANCELLED
+
+  plan SubscriptionPlan @relation(fields: [planId], references: [id])
+
+  @@index([userId, status])
+}
+
+model Campaign {
+  id             String    @id @default(uuid())
+  name           String
+  description    String
+  channel        String    @default("PUSH") // PUSH | SMS | IN_APP
+  segment        Json
+  title          String?
+  body           String?
+  promotionId    String?
+  scheduledAt    DateTime?
+  status         String    @default("DRAFT") // DRAFT | SCHEDULED | SENT | CANCELLED
+  sentCount      Int       @default(0)
+  openedCount    Int       @default(0)
+  convertedCount Int       @default(0)
+  createdAt      DateTime  @default(now())
+
+  promotion Promotion? @relation(fields: [promotionId], references: [id])
+}
+
+model Referral {
+  id         String    @id @default(uuid())
+  referrerId String
+  refereeId  String    @unique
+  code       String
+  status     String    @default("PENDING") // PENDING | REWARDED | CANCELLED
+  rewardedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([referrerId])
+}
+
+// Shadow mode (KRAVEO_SPEC_MODULES.md section 13): the legacy price (authoritative) next to what the module engine would charge.
+model PricingParityLog {
+  id           String   @id @default(uuid())
+  orderRef     String
+  legacyResult Json
+  newResult    Json
+  hasDiff      Boolean
+  diffFields   String[] @default([])
+  createdAt    DateTime @default(now())
+
+  @@index([hasDiff, createdAt])
+}
+
+// One row per (campaign, customer): the claim that makes a campaign send at most once to each customer, plus open tracking.
+model CampaignDelivery {
+  id         String    @id @default(uuid())
+  campaignId String
+  userId     String
+  status     String // SENT | FAILED | SKIPPED
+  reason     String?
+  sentAt     DateTime  @default(now())
+  openedAt   DateTime?
+
+  @@unique([campaignId, userId])
+  @@index([userId, sentAt])
+}
+
+// Support and complaints: one ticket per problem, a thread of messages, handled by admins. Customers, restaurants and riders open them.
+model SupportTicket {
+  id              String    @id @default(uuid())
+  userId          String
+  role            String // CLIENT | VENDOR | DRIVER (who opened it)
+  orderId         String?
+  category        String // ORDER | PAYMENT | DELIVERY | FOOD_QUALITY | ACCOUNT | APP | OTHER
+  subject         String
+  status          String    @default("OPEN") // OPEN | IN_PROGRESS | RESOLVED | CLOSED
+  priority        String    @default("NORMAL") // LOW | NORMAL | HIGH | URGENT
+  assignedTo      String?
+  resolution      String?
+  resolvedAt      DateTime?
+  firstResponseAt DateTime?
+  lastMessageAt   DateTime  @default(now())
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages SupportMessage[]
+
+  @@index([status, createdAt])
+  @@index([userId, createdAt])
+  @@index([orderId])
+}
+
+model SupportMessage {
+  id         String   @id @default(uuid())
+  ticketId   String
+  authorId   String
+  authorRole String // CLIENT | VENDOR | DRIVER | ADMIN
+  body       String
+  // An internal note is visible to admins only.
+  internal   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId, createdAt])
+}
+
+// Legal texts (terms, privacy, refunds, partner contracts). A published version is never edited: a change is a new version.
+// Exactly one published version per (type, locale) is "active": the one the apps show.
+model LegalDocument {
+  id          String    @id @default(uuid())
+  type        String // TERMS | PRIVACY | REFUNDS | CONTRACT_VENDOR | CONTRACT_DRIVER
+  locale      String    @default("fr")
+  version     Int
+  title       String
+  content     String
+  status      String    @default("DRAFT") // DRAFT | PUBLISHED
+  isActive    Boolean   @default(false)
+  publishedAt DateTime?
+  createdBy   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([type, locale, version])
+  @@index([type, locale, isActive])
+}
+
+// Help-centre articles for customers, restaurants and riders.
+model HelpArticle {
+  id          String   @id @default(uuid())
+  slug        String   @unique
+  theme       String
+  audience    String   @default("ALL") // ALL | CLIENT | VENDOR | DRIVER
+  title       String
+  content     String
+  isPublished Boolean  @default(false)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([audience, isPublished])
+}
+
+// Sales pipeline for restaurants and riders the team wants to recruit (manual tracking, no automatic outreach).
+model Prospect {
+  id               String          @id @default(uuid())
+  kind             String          @default("RESTAURANT") // RESTAURANT | DRIVER
+  businessName     String
+  contactName      String?
+  phone            String?
+  email            String?
+  city             String          @default("Thiès")
+  district         String?
+  category         String?
+  source           String?
+  fit              String? // A | B | C
+  stage            String          @default("TO_CONTACT") // TO_CONTACT | CONTACTED | FOLLOW_UP | INTERESTED | SIGNED | REJECTED
+  nextFollowUpAt   DateTime?
+  lastContactedAt  DateTime?
+  assignedTo       String?
+  createdBy        String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  events           ProspectEvent[]
+
+  @@index([stage, nextFollowUpAt])
+  @@index([kind, stage])
+}
+
+model ProspectEvent {
+  id         String   @id @default(uuid())
+  prospectId String
+  type       String // NOTE | CALL | VISIT | WHATSAPP | STAGE
+  body       String
+  createdBy  String?
+  createdAt  DateTime @default(now())
+
+  prospect Prospect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  @@index([prospectId, createdAt])
+}
+
+// One row per sign-in of a back-office user: lets the person see where they are signed in and close a session from the list.
+model AdminSession {
+  id         String    @id @default(uuid())
+  userId     String
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime  @default(now())
+  expiresAt  DateTime
+  revokedAt  DateTime?
+
+  @@index([userId, revokedAt])
+}
+
+// Where the app is available (module delivery.service_areas). A circle per area; used only when the module is in "AREAS" mode.
+model ServiceArea {
+  id        String   @id @default(uuid())
+  name      String
+  lat       Float
+  lng       Float
+  radiusKm  Float
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive])
 }

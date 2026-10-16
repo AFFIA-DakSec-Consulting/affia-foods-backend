@@ -7,20 +7,20 @@ import supertest from 'supertest';
 import { Role } from '@prisma/client';
 import { startTestServer, stopTestServer, TestServerInstance } from '../harness/app';
 import { prisma, seedTestDatabase, cleanTestOrders, cleanTestUsers } from '../harness/db';
-import { getStudentToken, getVendorToken, getDriverToken, getAdminToken, getAuthHeader } from '../harness/auth';
+import { getClientToken, getVendorToken, getDriverToken, getAdminToken, getAuthHeader } from '../harness/auth';
 import { __resetRateLimits } from '../../src/middleware/rateLimit';
 import { decryptSecret } from '../../src/services/payoutCrypto';
 
 jest.setTimeout(60_000);
 
 const KEY = randomBytes(32).toString('base64');
-const STUDENT = { id: 'usr-1', phone: '+221 776543210' };
+const CLIENT = { id: 'usr-1', phone: '+221 776543210' };
 const ADMIN = { id: 'usr-5', phone: '+221 776543214' };
 const V1 = { id: 'usr-pa-v1', phone: '+221 779871111', vendorId: 'pa-ven-1' };
 const V2 = { id: 'usr-pa-v2', phone: '+221 779872222', vendorId: 'pa-ven-2' };
 const D1 = { id: 'usr-pa-d1', phone: '+221 779873333' };
 const H = (t: string) => getAuthHeader(t);
-const tStudent = getStudentToken(STUDENT.id, STUDENT.phone);
+const tClient = getClientToken(CLIENT.id, CLIENT.phone);
 const tAdmin = getAdminToken(ADMIN.id, ADMIN.phone);
 const tV1 = getVendorToken(V1.id, V1.phone);
 const tV2 = getVendorToken(V2.id, V2.phone);
@@ -158,7 +158,7 @@ describe('Payout accounts (phase 2)', () => {
   test('role isolation: only restaurants and riders use the partner routes, only admins the admin routes, nobody sees another account', async () => {
     await put('/api/partner/payout-account', tV1, { method: 'WAVE', phone: '771110001' });
     for (const [m, path] of [['get', '/api/partner/payout-account'], ['put', '/api/partner/payout-account']] as const) {
-      expect((await (request as any)[m](path).set(H(tStudent)).send({})).status).toBe(403);
+      expect((await (request as any)[m](path).set(H(tClient)).send({})).status).toBe(403);
       expect((await (request as any)[m](path).set(H(tAdmin)).send({})).status).toBe(403);
       expect((await (request as any)[m](path)).status).toBe(401);
     }
@@ -173,7 +173,7 @@ describe('Payout accounts (phase 2)', () => {
     expect((await prisma.payoutAccount.findUniqueOrThrow({ where: { userId: D1.id } })).partnerType).toBe('DRIVER');
     // admin routes
     const base = `/api/admin/partners/${V1.id}/payout-account`;
-    for (const t of [tStudent, tV1, tV2, tD1]) {
+    for (const t of [tClient, tV1, tV2, tD1]) {
       expect((await get(base, t)).status).toBe(403);
       expect((await put(base, t, { method: 'WAVE', phone: '771119999' })).status).toBe(403);
       expect((await request.patch(`${base}/verify`).set(H(t)).send({ verified: true })).status).toBe(403);
@@ -259,12 +259,12 @@ describe('Payout accounts (phase 2)', () => {
   });
 
   test('admin routes only accept restaurant owners and riders', async () => {
-    for (const id of [STUDENT.id, ADMIN.id, 'no-such-user']) {
+    for (const id of [CLIENT.id, ADMIN.id, 'no-such-user']) {
       const r = await get(`/api/admin/partners/${id}/payout-account`, tAdmin);
       expect([r.status, r.body.code]).toEqual([404, 'NOT_FOUND']);
     }
     expect((await get('/api/admin/partners/bad%20id/payout-account', tAdmin)).status).toBe(400);
-    expect((await put(`/api/admin/partners/${STUDENT.id}/payout-account`, tAdmin, { method: 'WAVE', phone: '771119998' })).status).toBe(404);
+    expect((await put(`/api/admin/partners/${CLIENT.id}/payout-account`, tAdmin, { method: 'WAVE', phone: '771119998' })).status).toBe(404);
   });
 
   test('five parallel first saves leave exactly one row and no error', async () => {

@@ -3,7 +3,7 @@ import { PushApp } from './types';
 
 export const MAX_ACTIVE_TOKENS_PER_USER = 10;
 
-const APP_OF_ROLE: Record<string, PushApp> = { STUDENT: 'CUSTOMER', VENDOR: 'VENDOR', DRIVER: 'DRIVER' };
+const APP_OF_ROLE: Record<string, PushApp> = { CLIENT: 'CUSTOMER', VENDOR: 'VENDOR', DRIVER: 'DRIVER' };
 /** The app a role may register for (ADMIN has none). */
 export const appForRole = (role: string): PushApp | null => APP_OF_ROLE[role] ?? null;
 

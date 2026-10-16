@@ -116,7 +116,7 @@ describe('Backend hardening', () => {
   // 1. GET /drivers/:id no longer leaks rider PII
   // =========================================================================================
   describe('1. rider directory', () => {
-    test('a pending rider, another rider and a student cannot read a rider; a rider reads only their own non-PII profile; the admin reads everything', async () => {
+    test('a pending rider, another rider and a client cannot read a rider; a rider reads only their own non-PII profile; the admin reads everything', async () => {
       const [r1, r2, r3] = W.riders;
       await prisma.driverPartner.update({ where: { id: r1.profileId }, data: { upiId: 'rider1@upi', emergencyPhone: '+221 770011111', vehicleRegNo: 'MP04AB1234', studentRegNo: '21BCG1' } });
       await prisma.driverPartner.update({ where: { id: r3.profileId }, data: { approvalStatus: 'PENDING' } });
@@ -272,7 +272,7 @@ describe('Backend hardening', () => {
       expect((await api.place(c1, v1, { couponCode: '' })).status).toBe(201);
     });
 
-    test('redeem-coins takes 50 coins atomically and only for students; 10 concurrent redemptions with 100 coins give exactly 2 uses of KRAVEO20', async () => {
+    test('redeem-coins takes 50 coins atomically and only for clients; 10 concurrent redemptions with 100 coins give exactly 2 uses of KRAVEO20', async () => {
       const [c1] = W.customers; const [v1] = W.vendors;
       await prisma.user.update({ where: { id: c1.id }, data: { kraveoCoins: 100, kraveo20Redeemed: 0 } });
       const res = await Promise.all(Array.from({ length: 10 }, () => request.post('/api/coupons/redeem-coins').set(bearer(c1.token)).send({})));
@@ -341,7 +341,7 @@ describe('Backend hardening', () => {
   // 5. Token revocation, deleted users, ghosts
   // =========================================================================================
   describe('5. tokens and accounts', () => {
-    const googleAs = (email: string, sub: string, name = 'Hardening Student') => setGoogleVerifier(async () => ({ sub, email, emailVerified: true, name }));
+    const googleAs = (email: string, sub: string, name = 'Hardening Client') => setGoogleVerifier(async () => ({ sub, email, emailVerified: true, name }));
     const googleLogin = (email: string, sub: string) => { googleAs(email, sub); return request.post('/api/auth/google').send({ idToken: 'g'.repeat(40) }); };
 
     test('DELETE /auth/account kills the old token at once (401 everywhere, POST /orders included) and the account cannot be signed into again', async () => {
@@ -372,13 +372,13 @@ describe('Backend hardening', () => {
       cleanupIds.push(again.body.user.id);
       // and the service itself refuses to place an order for a deleted / missing customer (4xx, not a 500)
       for (const id of [userId, 'hd-never-existed']) {
-        await expect(placeOrder(id, { vendorId: v1.vendorId, items: [{ itemId: v1.items[0].id, quantity: 1 }], dropoffHostel: 'Cité Lamy', dropoffNotes: null, clientRequestId: null }))
+        await expect(placeOrder(id, { vendorId: v1.vendorId, items: [{ itemId: v1.items[0].id, quantity: 1 }], dropoffHostel: 'Cité Lamy', dropoffLat: null, dropoffLng: null, dropoffNotes: null, clientRequestId: null }))
           .rejects.toMatchObject({ status: 401, code: 'ACCOUNT_UNAVAILABLE' });
       }
     });
 
     test('a valid token of a user that does not exist is 401 on every authenticated route and on the socket; a wrong tv claim is 401, a missing tv claim means 0', async () => {
-      const ghost = generateTestToken({ id: 'hd-ghost-1', phone: '+221 777899991', role: 'STUDENT' as any });
+      const ghost = generateTestToken({ id: 'hd-ghost-1', phone: '+221 777899991', role: 'CLIENT' as any });
       const [v1] = W.vendors; const [c1] = W.customers;
       for (const [m, url] of [['get', '/api/orders'], ['get', '/api/auth/profile'], ['get', '/api/orders/available'], ['post', '/api/payments/create-order'], ['get', '/api/drivers/locations']] as const) {
         const r = await (request as any)[m](url).set(bearer(ghost)).send({});
@@ -390,9 +390,9 @@ describe('Backend hardening', () => {
 
       // tv: the world's tokens carry no claim (= 0) and work; a token claiming tv 5 does not match the database's 0
       expect((await request.get('/api/auth/profile').set(bearer(c1.token))).status).toBe(200);
-      const wrongTv = generateTestToken({ id: c1.id, phone: c1.phone, role: 'STUDENT' as any, tv: 5 });
+      const wrongTv = generateTestToken({ id: c1.id, phone: c1.phone, role: 'CLIENT' as any, tv: 5 });
       expect((await request.get('/api/auth/profile').set(bearer(wrongTv))).status).toBe(401);
-      const rightTv = generateTestToken({ id: c1.id, phone: c1.phone, role: 'STUDENT' as any, tv: 0 });
+      const rightTv = generateTestToken({ id: c1.id, phone: c1.phone, role: 'CLIENT' as any, tv: 0 });
       expect((await request.get('/api/auth/profile').set(bearer(rightTv))).status).toBe(200);
       await prisma.user.update({ where: { id: c1.id }, data: { tokenVersion: 3 } });
       expect((await request.get('/api/auth/profile').set(bearer(c1.token))).status).toBe(401); // old, claimless token
@@ -436,9 +436,9 @@ describe('Backend hardening', () => {
       await bumpTokenVersion(c3.id);
       expect((await request.get('/api/orders').set(bearer(c3.token))).status).toBe(401);
       // a ghost is never cached as "fine"
-      const ghost = generateTestToken({ id: 'hd-ghost-2', phone: '+221 777899993', role: 'STUDENT' as any });
+      const ghost = generateTestToken({ id: 'hd-ghost-2', phone: '+221 777899993', role: 'CLIENT' as any });
       expect((await request.get('/api/orders').set(bearer(ghost))).status).toBe(401);
-      await prisma.user.create({ data: { id: 'hd-ghost-2', name: 'Ghost Two', phone: '+221 777899993', role: 'STUDENT' } });
+      await prisma.user.create({ data: { id: 'hd-ghost-2', name: 'Ghost Two', phone: '+221 777899993', role: 'CLIENT' } });
       expect((await request.get('/api/orders').set(bearer(ghost))).status).toBe(200);
     });
   });
@@ -505,7 +505,7 @@ describe('Backend hardening', () => {
       for (const k of ['RL_ORDER_CREATE_MAX', 'RL_ORDER_CANCEL_MAX', 'RL_PAYMENT_CREATE_MAX', 'RL_AUTH_IP_MAX']) setEnv(k, undefined);
       process.env.NODE_ENV = 'production';
       try {
-        const tok = generateTestToken({ id: 'hd-limit-user', phone: '+221 777899992', role: 'STUDENT' as any });
+        const tok = generateTestToken({ id: 'hd-limit-user', phone: '+221 777899992', role: 'CLIENT' as any });
         const call = (method: string, p: string, body: any = {}) => {
           let status = 200; let json: any = null;
           const res: any = { setHeader() {}, status(s: number) { status = s; return this; }, json(b: any) { json = b; return this; } };
@@ -810,7 +810,7 @@ describe('Backend hardening', () => {
 
     test('match by googleSub first; link by email only when the stored googleSub is NULL; never overwrite a different googleSub', async () => {
       const email = 'link@hardening.test';
-      await prisma.user.create({ data: { id: 'hd-g-nosub', name: 'No Sub', email, role: 'STUDENT' } }); // e.g. created by an admin: email, no sub
+      await prisma.user.create({ data: { id: 'hd-g-nosub', name: 'No Sub', email, role: 'CLIENT' } }); // e.g. created by an admin: email, no sub
       const linked = await login(email, 'g-sub-A');
       expect([linked.status, linked.body.isNewUser, linked.body.user.id]).toEqual([200, false, 'hd-g-nosub']);
       expect((await prisma.user.findUniqueOrThrow({ where: { id: 'hd-g-nosub' } })).googleSub).toBe('g-sub-A');
@@ -828,7 +828,7 @@ describe('Backend hardening', () => {
       expect(await prisma.user.count({ where: { googleSub: 'g-sub-A' } })).toBe(1);
 
       // A changed email that belongs to somebody else is a conflict, not a crash.
-      await prisma.user.create({ data: { id: 'hd-g-other', name: 'Other', email: 'taken@hardening.test', googleSub: 'g-sub-Z', role: 'STUDENT' } });
+      await prisma.user.create({ data: { id: 'hd-g-other', name: 'Other', email: 'taken@hardening.test', googleSub: 'g-sub-Z', role: 'CLIENT' } });
       const clash = await login('taken@hardening.test', 'g-sub-A');
       expect([clash.status, clash.body.code]).toEqual([409, 'ACCOUNT_CONFLICT']);
       // A partner's e-mail is still a partner account
@@ -844,7 +844,7 @@ describe('Backend hardening', () => {
     test('customers (and anonymous callers) get only what the app needs; the admin and the owner keep the full row', async () => {
       const [v1, v2] = W.vendors;
       await prisma.vendor.update({ where: { id: v1.vendorId }, data: { fssaiNumber: '12345678901234' } });
-      const allowedVendor = ['id', 'name', 'category', 'rating', 'totalRatingsCount', 'eta', 'bannerImage', 'address', 'isAcceptingOrders', 'lat', 'lng', 'menuItems'];
+      const allowedVendor = ['id', 'name', 'category', 'rating', 'totalRatingsCount', 'eta', 'bannerImage', 'address', 'isAcceptingOrders', 'lat', 'lng', 'menuItems', 'description', 'logoUrl', 'openingHours']; // the restaurant profile shown in the app
       const allowedItem = ['id', 'vendorId', 'name', 'price', 'category', 'description', 'imageUrl', 'isAvailable', 'isVeg', 'rating', 'ratingCount'];
       const ownerHeaders = bearer(v2.token);
       for (const headers of [{}, bearer(W.customers[0].token), ownerHeaders, bearer(W.riders[0].token)]) {

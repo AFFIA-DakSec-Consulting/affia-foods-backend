@@ -10,7 +10,7 @@ import supertest from 'supertest';
 import { Role } from '@prisma/client';
 import { startTestServer, stopTestServer, TestServerInstance } from '../harness/app';
 import { prisma, seedTestDatabase, cleanTestOrders, cleanTestUsers } from '../harness/db';
-import { getStudentToken, getVendorToken, getDriverToken, getAdminToken, getAuthHeader } from '../harness/auth';
+import { getClientToken, getVendorToken, getDriverToken, getAdminToken, getAuthHeader } from '../harness/auth';
 import { __resetRateLimits } from '../../src/middleware/rateLimit';
 import { invalidateSettingsCache } from '../../src/services/settings';
 import { createSettlements, runDailySettlementJob, __resetSettlementJob } from '../../src/services/settlement';
@@ -20,7 +20,7 @@ import { localDateString, localInstant, addLocalDays } from '../../src/utils/tim
 
 jest.setTimeout(90_000);
 
-const STUDENT = { id: 'usr-1', phone: '+221 776543210' };
+const CLIENT = { id: 'usr-1', phone: '+221 776543210' };
 const ADMIN = { id: 'usr-5', phone: '+221 776543214' };
 const S1 = { id: 'usr-st-v1', phone: '+221 779881111', vendorId: 'st-ven-1' }; // Wave payout details
 const S2 = { id: 'usr-st-v2', phone: '+221 779882222', vendorId: 'st-ven-2' }; // bank payout details
@@ -29,7 +29,7 @@ const S4 = { id: 'usr-st-v4', phone: '+221 779884444', vendorId: 'st-ven-4' }; /
 const RIDER = { id: 'usr-st-d1', phone: '+221 779885555' };
 const ALL_VENDORS = [S1, S2, S3, S4].map((v) => v.vendorId);
 const H = (t: string) => getAuthHeader(t);
-const tStudent = getStudentToken(STUDENT.id, STUDENT.phone);
+const tClient = getClientToken(CLIENT.id, CLIENT.phone);
 const tAdmin = getAdminToken(ADMIN.id, ADMIN.phone);
 const tS1 = getVendorToken(S1.id, S1.phone);
 const tS2 = getVendorToken(S2.id, S2.phone);
@@ -57,7 +57,7 @@ const mkOrder = async (o: OrderSpec = {}) => {
   const status = o.status ?? 'DELIVERED';
   return prisma.order.create({
     data: {
-      customerId: STUDENT.id,
+      customerId: CLIENT.id,
       vendorId: o.vendorId ?? S1.vendorId,
       driverId: o.driverId === undefined ? null : o.driverId,
       status,
@@ -290,7 +290,7 @@ describe('Settlements (phase 2)', () => {
     test('legacy rows (backfilled in phase 1: vendorSubtotal = subtotal, commission 0) settle for the full food total', async () => {
       await prisma.order.create({
         data: {
-          customerId: STUDENT.id, vendorId: S1.vendorId, status: 'DELIVERED', paymentStatus: 'PAID', dropoffHostel: 'Cité Lamy', totalAmount: 170,
+          customerId: CLIENT.id, vendorId: S1.vendorId, status: 'DELIVERED', paymentStatus: 'PAID', dropoffHostel: 'Cité Lamy', totalAmount: 170,
           subtotal: 140, taxAndPackaging: 15, deliveryFee: 30, vendorSubtotal: 140, commissionTotal: 0, deliveredAt: ago(48),
           items: { create: [{ name: 'Old dish', quantity: 2, price: 70, vendorUnitPrice: 70, commissionUnit: 0 }] },
         },
@@ -667,7 +667,7 @@ describe('Settlements (phase 2)', () => {
       expect(none).toHaveLength(1); // header only
       expect((await adminGet('/api/admin/settlements/export.csv')).status).toBe(200); // default: last 31 days
       for (const q of ['from=nope', 'from=2026-10-10&to=2026-10-01', 'from=2024-01-01&to=2026-10-01']) expect((await adminGet(`/api/admin/settlements/export.csv?${q}`)).status).toBe(400);
-      for (const t of [tStudent, tS1, tRider]) expect((await request.get('/api/admin/settlements/export.csv').set(H(t))).status).toBe(403);
+      for (const t of [tClient, tS1, tRider]) expect((await request.get('/api/admin/settlements/export.csv').set(H(t))).status).toBe(403);
       expect((await request.get('/api/admin/settlements/export.csv')).status).toBe(401);
     });
   });
@@ -784,7 +784,7 @@ describe('Settlements (phase 2)', () => {
       for (const id of [theirs.id, cancelled.id, randomUUID()]) expect((await vget(`/api/partner/settlements/${id}`, tS1)).status).toBe(404);
       expect((await vget(`/api/partner/settlements/${mine.id}`, tS1)).status).toBe(200);
       expect((await vget('/api/partner/settlements/bad%20id', tS1)).status).toBe(400);
-      for (const t of [tStudent, tAdmin, tRider]) {
+      for (const t of [tClient, tAdmin, tRider]) {
         expect((await vget('/api/partner/settlements', t)).status).toBe(403);
         expect((await vget(`/api/partner/settlements/${mine.id}`, t)).status).toBe(403);
       }
@@ -824,7 +824,7 @@ describe('Settlements (phase 2)', () => {
       expect(ok.body).toMatchObject({ changed: true, data: { group: 'settlement', isDefault: false, value: { time: '21:15', mode: 'MANUAL_PAYOUT', autoCreate: false, holdDays: 30 } } });
       expect((await put({ holdDays: 0, time: '00:00' })).status).toBe(200);
       expect((await audits('SETTINGS_UPDATED')).length).toBe(2);
-      for (const t of [tStudent, tS1, tRider]) expect((await request.put('/api/admin/settings/settlement').set(H(t)).send({ holdDays: 1 })).status).toBe(403);
+      for (const t of [tClient, tS1, tRider]) expect((await request.put('/api/admin/settings/settlement').set(H(t)).send({ holdDays: 1 })).status).toBe(403);
     });
 
     test('providers: manual always enabled, wave and orange_money report "not configured"', async () => {
@@ -869,7 +869,7 @@ describe('Settlements (phase 2)', () => {
       // every earlier migration is untouched by this change (new folder only)
       const dirs = fs.readdirSync(path.join(__dirname, '../../prisma/migrations')).filter((d) => !d.endsWith('.toml'));
       expect(dirs).toContain('20261010_settlements_payouts');
-      expect(dirs.sort().at(-1)).toBe('20261012_senegal'); // the Senegal version added the next (additive) migration after this one
+      expect(dirs).toContain('20261012_senegal'); // the Senegal version added the next (additive) migration after this one
     });
   });
 
@@ -884,7 +884,7 @@ describe('Settlements (phase 2)', () => {
         ['post', `/api/admin/settlements/${id}/release`, {}], ['post', `/api/admin/settlements/${id}/adjustments`, { amount: 1, reason: 'role test' }], ['post', `/api/admin/settlements/${id}/cancel`, {}],
       ];
       for (const [m, p, b] of calls) {
-        for (const t of [tStudent, tS1, tS2, tRider]) {
+        for (const t of [tClient, tS1, tS2, tRider]) {
           const r = await (request as any)[m](p).set(H(t)).send(b ?? {});
           expect([m, p, r.status]).toEqual([m, p, 403]);
         }

@@ -1,12 +1,12 @@
 import supertest from 'supertest';
 import { startTestServer, stopTestServer, TestServerInstance } from '../harness/app';
 import { prisma, seedTestDatabase, cleanTestOrders, cleanTestUsers } from '../harness/db';
-import { getStudentToken, getVendorToken, getDriverToken, getAdminToken, getAuthHeader } from '../harness/auth';
+import { getClientToken, getVendorToken, getDriverToken, getAdminToken, getAuthHeader } from '../harness/auth';
 
 describe('Empirical Verification: Gate OTP & Delivery Security (Milestone 3 Subtask 2)', () => {
   let serverInstance: TestServerInstance;
   let request: ReturnType<typeof supertest>;
-  let studentToken: string;
+  let clientToken: string;
   let vendorToken: string;
   let driverToken: string;
   let adminToken: string;
@@ -24,7 +24,7 @@ describe('Empirical Verification: Gate OTP & Delivery Security (Milestone 3 Subt
     request = supertest(serverInstance.app);
 
     // 4. Generate role-based JWT tokens
-    studentToken = getStudentToken('usr-1', '+221 776543210');
+    clientToken = getClientToken('usr-1', '+221 776543210');
     vendorToken = getVendorToken('usr-3', '+221 776543212');
     driverToken = getDriverToken('usr-4', '+221 776543213');
     adminToken = getAdminToken('usr-5', '+221 776543214');
@@ -423,7 +423,7 @@ describe('Empirical Verification: Gate OTP & Delivery Security (Milestone 3 Subt
       expect(res.body.success).toBe(false);
     });
 
-    test('EMP_OTP_13: STUDENT role request to verify-gate-otp returns HTTP 403 Forbidden', async () => {
+    test('EMP_OTP_13: CLIENT role request to verify-gate-otp returns HTTP 403 Forbidden', async () => {
       const orderId = 'gate-otp-test-ord-13';
 
       await prisma.order.create({
@@ -442,7 +442,7 @@ describe('Empirical Verification: Gate OTP & Delivery Security (Milestone 3 Subt
 
       const res = await request
         .post(`/api/orders/${orderId}/verify-gate-otp`)
-        .set(getAuthHeader(studentToken))
+        .set(getAuthHeader(clientToken))
         .send({ otpCode: '3434' });
 
       expect(res.status).toBe(403);

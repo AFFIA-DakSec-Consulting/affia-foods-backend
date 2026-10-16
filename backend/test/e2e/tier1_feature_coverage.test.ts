@@ -3,14 +3,14 @@ import supertest from 'supertest';
 import { Socket } from 'socket.io-client';
 import { startTestServer, stopTestServer, TestServerInstance } from '../harness/app';
 import { prisma, seedTestDatabase, cleanTestOrders, cleanTestUsers } from '../harness/db';
-import { getStudentToken, getVendorToken, getDriverToken, getAdminToken, getAuthHeader } from '../harness/auth';
+import { getClientToken, getVendorToken, getDriverToken, getAdminToken, getAuthHeader } from '../harness/auth';
 import { connectTestSocket, waitForSocketEvent, disconnectTestSocket } from '../harness/socket';
 import { setGoogleVerifier } from '../../src/services/googleAuth';
 
 describe('Tier 1: Feature Coverage E2E Test Suite (30 Test Cases Across 6 Features)', () => {
   let serverInstance: TestServerInstance;
   let request: ReturnType<typeof supertest>;
-  let studentToken: string;
+  let clientToken: string;
   let vendorToken: string;
   let driverToken: string;
   let adminToken: string;
@@ -28,7 +28,7 @@ describe('Tier 1: Feature Coverage E2E Test Suite (30 Test Cases Across 6 Featur
     request = supertest(serverInstance.app);
 
     // 3. Generate role-based JWT tokens
-    studentToken = getStudentToken('usr-1', '+221 776543210');
+    clientToken = getClientToken('usr-1', '+221 776543210');
     vendorToken = getVendorToken('usr-3', '+221 776543212');
     driverToken = getDriverToken('usr-4', '+221 776543213');
     adminToken = getAdminToken('usr-5', '+221 776543214');
@@ -46,7 +46,7 @@ describe('Tier 1: Feature Coverage E2E Test Suite (30 Test Cases Across 6 Featur
   // =========================================================================
   describe('Feature 1: Database Persistence & Query', () => {
     test('T1_DB_01: User Creation & Persistence Query in PostgreSQL', async () => {
-      setGoogleVerifier(async () => ({ sub: 'sub-t1-db01', email: 'persist.student@kraveo.test', emailVerified: true, name: 'Test Persistent Student' }));
+      setGoogleVerifier(async () => ({ sub: 'sub-t1-db01', email: 'persist.client@kraveo.test', emailVerified: true, name: 'Test Persistent Client' }));
       const res = await request.post('/api/auth/google').send({ idToken: 'x'.repeat(40) });
       setGoogleVerifier(null);
       expect(res.status).toBe(200);
@@ -54,11 +54,11 @@ describe('Tier 1: Feature Coverage E2E Test Suite (30 Test Cases Across 6 Featur
       expect(res.body.isNewUser).toBe(true);
 
       // Directly query PostgreSQL DB via Prisma ORM
-      const dbUser = await prisma.user.findUnique({ where: { email: 'persist.student@kraveo.test' } });
+      const dbUser = await prisma.user.findUnique({ where: { email: 'persist.client@kraveo.test' } });
       expect(dbUser).not.toBeNull();
       expect(dbUser?.googleSub).toBe('sub-t1-db01');
-      expect(dbUser?.name).toBe('Test Persistent Student');
-      expect(dbUser?.role).toBe('STUDENT');
+      expect(dbUser?.name).toBe('Test Persistent Client');
+      expect(dbUser?.role).toBe('CLIENT');
       expect(dbUser?.phone).toBeNull(); // collected later in the profile step
     });
 
@@ -83,7 +83,7 @@ describe('Tier 1: Feature Coverage E2E Test Suite (30 Test Cases Across 6 Featur
     test('T1_DB_03: Order Placement & Relational OrderItem DB Insertion', async () => {
       const res = await request
         .post('/api/orders')
-        .set(getAuthHeader(studentToken))
+        .set(getAuthHeader(clientToken))
         .send({
           vendorId: 'ven-1',
           items: [{ itemId: 'item-1', quantity: 2 }],
@@ -152,7 +152,7 @@ describe('Tier 1: Feature Coverage E2E Test Suite (30 Test Cases Across 6 Featur
 
       const payRes = await request
         .post('/api/payments/create-order')
-        .set(getAuthHeader(studentToken))
+        .set(getAuthHeader(clientToken))
         .send({ orderId: order.id, amount: 250 });
 
       expect(payRes.status).toBe(200);
@@ -188,7 +188,7 @@ describe('Tier 1: Feature Coverage E2E Test Suite (30 Test Cases Across 6 Featur
 
       const res = await request
         .post('/api/payments/create-order')
-        .set(getAuthHeader(studentToken))
+        .set(getAuthHeader(clientToken))
         .send({ orderId: order.id, amount: 180 });
 
       expect(res.status).toBe(200);
@@ -231,7 +231,7 @@ describe('Tier 1: Feature Coverage E2E Test Suite (30 Test Cases Across 6 Featur
 
       const res = await request
         .post('/api/payments/verify-signature')
-        .set(getAuthHeader(studentToken))
+        .set(getAuthHeader(clientToken))
         .send({
           razorpayOrderId,
           razorpayPaymentId,
@@ -486,13 +486,13 @@ describe('Tier 1: Feature Coverage E2E Test Suite (30 Test Cases Across 6 Featur
         }
       });
 
-      // 1. STUDENT role attempt should be rejected with 403 Forbidden
-      const studentRes = await request
+      // 1. CLIENT role attempt should be rejected with 403 Forbidden
+      const clientRes = await request
         .post(`/api/orders/${order.id}/verify-gate-otp`)
-        .set(getAuthHeader(studentToken))
+        .set(getAuthHeader(clientToken))
         .send({ otpCode: '9123' });
-      expect(studentRes.status).toBe(403);
-      expect(studentRes.body.success).toBe(false);
+      expect(clientRes.status).toBe(403);
+      expect(clientRes.body.success).toBe(false);
 
       // 2. DRIVER role attempt with numeric OTP coercion ({ otp: 9123 })
       const res = await request
@@ -564,7 +564,7 @@ describe('Tier 1: Feature Coverage E2E Test Suite (30 Test Cases Across 6 Featur
   // =========================================================================
   describe('Feature 4: Removal of Universal OTPs & JWT/RBAC Auth Enforcement', () => {
     test('T1_AUTH_01: Google Sign-In & JWT Token Issue Flow', async () => {
-      setGoogleVerifier(async () => ({ sub: 'sub-t1-auth01', email: 'auth.flow@kraveo.test', emailVerified: true, name: 'Auth Flow Student' }));
+      setGoogleVerifier(async () => ({ sub: 'sub-t1-auth01', email: 'auth.flow@kraveo.test', emailVerified: true, name: 'Auth Flow Client' }));
       const res = await request.post('/api/auth/google').send({ idToken: 'y'.repeat(40) });
       setGoogleVerifier(null);
 
@@ -579,7 +579,7 @@ describe('Tier 1: Feature Coverage E2E Test Suite (30 Test Cases Across 6 Featur
       // Valid JWT token request
       const validRes = await request
         .get('/api/auth/profile')
-        .set(getAuthHeader(studentToken));
+        .set(getAuthHeader(clientToken));
       expect(validRes.status).toBe(200);
       expect(validRes.body.success).toBe(true);
       expect(validRes.body.user.id).toBe('usr-1');
@@ -597,12 +597,12 @@ describe('Tier 1: Feature Coverage E2E Test Suite (30 Test Cases Across 6 Featur
         .set(getAuthHeader(vendorToken));
       expect(vendorRes.status).toBe(200);
 
-      // 2. Unauthorized STUDENT token -> 403 Forbidden
-      const studentRes = await request
+      // 2. Unauthorized CLIENT token -> 403 Forbidden
+      const clientRes = await request
         .patch('/api/vendors/ven-1/toggle')
-        .set(getAuthHeader(studentToken));
-      expect(studentRes.status).toBe(403);
-      expect(studentRes.body.success).toBe(false);
+        .set(getAuthHeader(clientToken));
+      expect(clientRes.status).toBe(403);
+      expect(clientRes.body.success).toBe(false);
     });
 
     test('T1_AUTH_04: Driver Role RBAC Enforcement', async () => {
@@ -620,11 +620,11 @@ describe('Tier 1: Feature Coverage E2E Test Suite (30 Test Cases Across 6 Featur
       // Earlier tests left orders at the gate for usr-4; a rider can carry only one order at a time.
       await prisma.order.updateMany({ where: { driverId: 'usr-4', status: { notIn: ['DELIVERED', 'CANCELLED'] } }, data: { status: 'DELIVERED' } });
 
-      // 1. Unauthorized STUDENT token trying to accept driver duty -> 403 Forbidden
-      const studentRes = await request
+      // 1. Unauthorized CLIENT token trying to accept driver duty -> 403 Forbidden
+      const clientRes = await request
         .post(`/api/orders/${order.id}/accept-driver`)
-        .set(getAuthHeader(studentToken));
-      expect(studentRes.status).toBe(403);
+        .set(getAuthHeader(clientToken));
+      expect(clientRes.status).toBe(403);
 
       // 2. Authorized DRIVER token -> 200 OK
       const driverRes = await request
@@ -658,7 +658,7 @@ describe('Tier 1: Feature Coverage E2E Test Suite (30 Test Cases Across 6 Featur
       // 1. GET /api/drivers requires ADMIN
       const d1 = await request.get('/api/drivers');
       expect(d1.status).toBe(401);
-      const d2 = await request.get('/api/drivers').set(getAuthHeader(studentToken));
+      const d2 = await request.get('/api/drivers').set(getAuthHeader(clientToken));
       expect(d2.status).toBe(403);
       const d3 = await request.get('/api/drivers').set(getAuthHeader(adminToken));
       expect(d3.status).toBe(200);
@@ -666,7 +666,7 @@ describe('Tier 1: Feature Coverage E2E Test Suite (30 Test Cases Across 6 Featur
       // 2. GET /api/drivers/:id requires DRIVER or ADMIN
       const dId1 = await request.get('/api/drivers/usr-4');
       expect(dId1.status).toBe(401);
-      const dId2 = await request.get('/api/drivers/usr-4').set(getAuthHeader(studentToken));
+      const dId2 = await request.get('/api/drivers/usr-4').set(getAuthHeader(clientToken));
       expect(dId2.status).toBe(403);
       const dId3 = await request.get('/api/drivers/usr-4').set(getAuthHeader(driverToken));
       expect(dId3.status).toBe(200);
@@ -674,19 +674,19 @@ describe('Tier 1: Feature Coverage E2E Test Suite (30 Test Cases Across 6 Featur
       // 3. GET /api/orders requires requireAuth
       const o1 = await request.get('/api/orders');
       expect(o1.status).toBe(401);
-      const o2 = await request.get('/api/orders').set(getAuthHeader(studentToken));
+      const o2 = await request.get('/api/orders').set(getAuthHeader(clientToken));
       expect(o2.status).toBe(200);
 
       // 4. GET /api/orders/:id requires requireAuth
       const oId1 = await request.get('/api/orders/nonexistent-id');
       expect(oId1.status).toBe(401);
-      const oId2 = await request.get('/api/orders/nonexistent-id').set(getAuthHeader(studentToken));
+      const oId2 = await request.get('/api/orders/nonexistent-id').set(getAuthHeader(clientToken));
       expect(oId2.status).toBe(404);
 
       // 5. PATCH /api/vendors/:id/status requires VENDOR or ADMIN
       const vs1 = await request.patch('/api/vendors/ven-1/status').send({ isAcceptingOrders: true });
       expect(vs1.status).toBe(401);
-      const vs2 = await request.patch('/api/vendors/ven-1/status').set(getAuthHeader(studentToken)).send({ isAcceptingOrders: true });
+      const vs2 = await request.patch('/api/vendors/ven-1/status').set(getAuthHeader(clientToken)).send({ isAcceptingOrders: true });
       expect(vs2.status).toBe(403);
       const vs3 = await request.patch('/api/vendors/ven-1/status').set(getAuthHeader(vendorToken)).send({ isAcceptingOrders: true });
       expect(vs3.status).toBe(200);
@@ -694,7 +694,7 @@ describe('Tier 1: Feature Coverage E2E Test Suite (30 Test Cases Across 6 Featur
       // 6. PATCH /api/vendors/items/:itemId requires VENDOR or ADMIN
       const vi1 = await request.patch('/api/vendors/items/item-1').send({ price: 190 });
       expect(vi1.status).toBe(401);
-      const vi2 = await request.patch('/api/vendors/items/item-1').set(getAuthHeader(studentToken)).send({ price: 190 });
+      const vi2 = await request.patch('/api/vendors/items/item-1').set(getAuthHeader(clientToken)).send({ price: 190 });
       expect(vi2.status).toBe(403);
       const vi3 = await request.patch('/api/vendors/items/item-1').set(getAuthHeader(vendorToken)).send({ price: 190 });
       expect(vi3.status).toBe(200);
@@ -702,7 +702,7 @@ describe('Tier 1: Feature Coverage E2E Test Suite (30 Test Cases Across 6 Featur
       // 7. GET /api/drivers/locations requires requireAuth
       const dl1 = await request.get('/api/drivers/locations');
       expect(dl1.status).toBe(401);
-      const dl2 = await request.get('/api/drivers/locations').set(getAuthHeader(studentToken));
+      const dl2 = await request.get('/api/drivers/locations').set(getAuthHeader(clientToken));
       expect(dl2.status).toBe(200);
     });
   });
@@ -739,7 +739,7 @@ describe('Tier 1: Feature Coverage E2E Test Suite (30 Test Cases Across 6 Featur
       // Place new order: contract 1.2 - the restaurant hears nothing until the order is paid.
       const placed = await request
         .post('/api/orders')
-        .set(getAuthHeader(studentToken))
+        .set(getAuthHeader(clientToken))
         .send({
           vendorId: 'ven-1',
           items: [{ itemId: 'item-1', quantity: 1 }],
@@ -749,8 +749,8 @@ describe('Tier 1: Feature Coverage E2E Test Suite (30 Test Cases Across 6 Featur
       await new Promise((r) => setTimeout(r, 200));
       expect(alerts).toBe(0);
 
-      const pay = await request.post('/api/payments/create-order').set(getAuthHeader(studentToken)).send({ orderId: placed.body.data.id });
-      const verified = await request.post('/api/payments/verify-signature').set(getAuthHeader(studentToken))
+      const pay = await request.post('/api/payments/create-order').set(getAuthHeader(clientToken)).send({ orderId: placed.body.data.id });
+      const verified = await request.post('/api/payments/verify-signature').set(getAuthHeader(clientToken))
         .send({ razorpayOrderId: pay.body.razorpayOrderId, razorpayPaymentId: 'pay_sim_soc01', razorpaySignature: 'sim' });
       expect(verified.status).toBe(200);
 
@@ -776,7 +776,7 @@ describe('Tier 1: Feature Coverage E2E Test Suite (30 Test Cases Across 6 Featur
       });
 
       // The customer's socket (with its token) may watch its own order.
-      clientSocket = await connectTestSocket(serverInstance.baseUrl, { auth: { token: studentToken } });
+      clientSocket = await connectTestSocket(serverInstance.baseUrl, { auth: { token: clientToken } });
       expect((await clientSocket.emitWithAck('join_room', `order_${order.id}`)).ok).toBe(true);
 
       const eventPromise = waitForSocketEvent(clientSocket, 'order_updated', 5000);
@@ -819,7 +819,7 @@ describe('Tier 1: Feature Coverage E2E Test Suite (30 Test Cases Across 6 Featur
       const fcmToken = 'fcm_token_test_device_12345';
       const res = await request
         .post('/api/notifications/register-token')
-        .set(getAuthHeader(studentToken))
+        .set(getAuthHeader(clientToken))
         .send({ fcmToken });
 
       expect(res.status).toBe(200);
@@ -843,7 +843,7 @@ describe('Tier 1: Feature Coverage E2E Test Suite (30 Test Cases Across 6 Featur
         }
       });
 
-      clientSocket = await connectTestSocket(serverInstance.baseUrl, { auth: { token: studentToken } });
+      clientSocket = await connectTestSocket(serverInstance.baseUrl, { auth: { token: clientToken } });
       expect((await clientSocket.emitWithAck('join_room', `order_${order.id}`)).ok).toBe(true);
 
       const updatePromise = waitForSocketEvent(clientSocket, 'order_updated', 5000);
@@ -886,7 +886,7 @@ describe('Tier 1: Feature Coverage E2E Test Suite (30 Test Cases Across 6 Featur
     test('T1_SEC_03: Content-Type & JSON Payload Enforcement', async () => {
       const res = await request
         .post('/api/orders')
-        .set(getAuthHeader(studentToken))
+        .set(getAuthHeader(clientToken))
         .set('Content-Type', 'application/json')
         .send('invalid-raw-json-string');
 

@@ -5,12 +5,12 @@ import { io as ClientSocket, Socket } from 'socket.io-client';
 import { Role } from '@prisma/client';
 import { startTestServer, stopTestServer, TestServerInstance } from '../harness/app';
 import { prisma, seedTestDatabase, cleanTestOrders, cleanTestUsers } from '../harness/db';
-import { getStudentToken, getVendorToken, getDriverToken, getAdminToken, getAuthHeader } from '../harness/auth';
+import { getClientToken, getVendorToken, getDriverToken, getAdminToken, getAuthHeader } from '../harness/auth';
 
 describe('Adversarial Security & Concurrency Stress Test Suite', () => {
   let serverInstance: TestServerInstance;
   let request: ReturnType<typeof supertest>;
-  let studentToken: string;
+  let clientToken: string;
   let vendorToken: string;
   let driverToken: string;
   let adminToken: string;
@@ -25,20 +25,20 @@ describe('Adversarial Security & Concurrency Stress Test Suite', () => {
     serverInstance = await startTestServer(0);
     request = supertest(serverInstance.app);
 
-    studentToken = getStudentToken('usr-1', '+221 776543210');
+    clientToken = getClientToken('usr-1', '+221 776543210');
     vendorToken = getVendorToken('usr-3', '+221 776543212');
     driverToken = getDriverToken('usr-4', '+221 776543213');
     adminToken = getAdminToken('usr-5', '+221 776543214');
 
-    // Create a secondary student user for IDOR testing
+    // Create a secondary client user for IDOR testing
     await prisma.user.upsert({
       where: { phone: '+221 779900002' },
       update: {},
       create: {
-        id: 'usr-student-2',
-        name: 'Victim Student',
+        id: 'usr-client-2',
+        name: 'Victim Client',
         phone: '+221 779900002',
-        role: Role.STUDENT,
+        role: Role.CLIENT,
         hostelBlock: 'Girls Hostel Cité Lamy'
       }
     });
@@ -259,39 +259,39 @@ describe('Adversarial Security & Concurrency Stress Test Suite', () => {
       }
     });
 
-    test('AUTH_03: Student order listing is scoped to the authenticated customer', async () => {
-      const orderA = 'idor-order-student-a';
-      const orderB = 'idor-order-student-b';
+    test('AUTH_03: Client order listing is scoped to the authenticated customer', async () => {
+      const orderA = 'idor-order-client-a';
+      const orderB = 'idor-order-client-b';
 
       await prisma.order.createMany({
         data: [
           { id: orderA, customerId: 'usr-1', vendorId: 'ven-1', totalAmount: 150, dropoffHostel: 'Boys Randoulène', status: 'PLACED' },
-          { id: orderB, customerId: 'usr-student-2', vendorId: 'ven-1', totalAmount: 350, dropoffHostel: 'Girls Cité Lamy', status: 'PLACED' }
+          { id: orderB, customerId: 'usr-client-2', vendorId: 'ven-1', totalAmount: 350, dropoffHostel: 'Girls Cité Lamy', status: 'PLACED' }
         ]
       });
 
-      // Student 1 requests order list without customerId filter
+      // Client 1 requests order list without customerId filter
       const res = await request
         .get('/api/orders')
-        .set(getAuthHeader(studentToken));
+        .set(getAuthHeader(clientToken));
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
 
       const returnedIds = res.body.data.map((o: any) => o.id);
-      // Student 1 sees only their own order.
+      // Client 1 sees only their own order.
       expect(returnedIds).toContain(orderA);
       expect(returnedIds).not.toContain(orderB);
     });
 
-    test('AUTH_04: Student A cannot read Student B\'s order or gate OTP', async () => {
+    test('AUTH_04: Client A cannot read Client B\'s order or gate OTP', async () => {
       const victimOrderId = 'idor-otp-leak-order';
       const secretGateOtp = '9281';
 
       await prisma.order.create({
         data: {
           id: victimOrderId,
-          customerId: 'usr-student-2', // Belong to Student 2
+          customerId: 'usr-client-2', // Belong to Client 2
           vendorId: 'ven-1',
           driverId: 'usr-4',
           totalAmount: 400,
@@ -301,10 +301,10 @@ describe('Adversarial Security & Concurrency Stress Test Suite', () => {
         }
       });
 
-      // Student 1 accesses Student 2's order directly by ID
+      // Client 1 accesses Client 2's order directly by ID
       const res = await request
         .get(`/api/orders/${victimOrderId}`)
-        .set(getAuthHeader(studentToken)); // usr-1 token
+        .set(getAuthHeader(clientToken)); // usr-1 token
 
       // 404, same as a missing order: another customer's order must not even be confirmed to exist.
       expect(res.status).toBe(404);
@@ -336,7 +336,7 @@ describe('Adversarial Security & Concurrency Stress Test Suite', () => {
       // A malicious client submits amount: 1 (₹1) instead of ₹500.
       const res = await request
         .post('/api/payments/create-order')
-        .set(getAuthHeader(studentToken))
+        .set(getAuthHeader(clientToken))
         .send({
           orderId,
           amount: 1 // ₹1 attack
@@ -498,7 +498,7 @@ describe('Adversarial Security & Concurrency Stress Test Suite', () => {
 
       const res = await request
         .post('/api/payments/create-order')
-        .set(getAuthHeader(studentToken))
+        .set(getAuthHeader(clientToken))
         .send({ orderId, amount: 199.99 });
 
       expect(res.status).toBe(200);
@@ -522,7 +522,7 @@ describe('Adversarial Security & Concurrency Stress Test Suite', () => {
       const redemptionRequests = Array.from({ length: 10 }, () =>
         request
           .post('/api/coupons/redeem-coins')
-          .set(getAuthHeader(studentToken))
+          .set(getAuthHeader(clientToken))
           .send({})
       );
 
@@ -564,7 +564,7 @@ describe('Adversarial Security & Concurrency Stress Test Suite', () => {
       const reviewRequests = Array.from({ length: 5 }, () =>
         request
           .post('/api/reviews')
-          .set(getAuthHeader(studentToken))
+          .set(getAuthHeader(clientToken))
           .send({
             orderId,
             driverRating: 5,

@@ -1222,7 +1222,7 @@ describe('Lifecycle journeys', () => {
 
   describe('J11 accounts that no longer exist', () => {
     test('PROVE: a valid token of a user that does not exist in the database gets 401 on every order endpoint, never 500', async () => {
-      const ghost = { id: 'jy-ghost-1', phone: '+221 777199999', role: 'STUDENT' as const };
+      const ghost = { id: 'jy-ghost-1', phone: '+221 777199999', role: 'CLIENT' as const };
       const { generateTestToken } = await import('../harness/auth');
       const token = generateTestToken(ghost as any);
       const [vX] = W.vendors;

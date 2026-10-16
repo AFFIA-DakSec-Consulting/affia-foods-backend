@@ -6,7 +6,7 @@
 import supertest from 'supertest';
 import { startTestServer, stopTestServer, TestServerInstance } from '../harness/app';
 import { prisma, seedTestDatabase, cleanTestOrders, cleanTestUsers } from '../harness/db';
-import { getAdminToken, getStudentToken, getAuthHeader } from '../harness/auth';
+import { getAdminToken, getClientToken, getAuthHeader } from '../harness/auth';
 import { __resetLoginLimiter } from '../../src/services/loginLimiter';
 import { __resetSignupLimiter } from '../../src/routes/partners';
 
@@ -79,7 +79,7 @@ describe('Partner approval pipeline', () => {
       expect((await prisma.user.findFirst({ where: { phone: '+221 770000302' } }))).toBeNull();
     });
 
-    test('a rider on a cycle needs no number plate and no student registration number', async () => {
+    test('a rider on a cycle needs no number plate and no client registration number', async () => {
       const res = await signup(driverBody('770000303', { vehicleType: 'cycle', vehicleRegNo: '' }));
       expect(res.status).toBe(201);
       const d = await prisma.driverPartner.findFirstOrThrow({ where: { userId: res.body.user.id } });
@@ -129,7 +129,7 @@ describe('Partner approval pipeline', () => {
       expect(me.status).toBe(200);
       expect(me.body.approvalStatus).toBe('PENDING');
       expect(me.body.vendor.name).toContain(NAME_PREFIX);
-      expect((await request.get('/api/partner/me').set(getAuthHeader(getStudentToken()))).status).toBe(403);
+      expect((await request.get('/api/partner/me').set(getAuthHeader(getClientToken()))).status).toBe(403);
     });
 
     test('cannot open the store, add menu items or touch orders (403 PARTNER_NOT_APPROVED)', async () => {
@@ -150,8 +150,8 @@ describe('Partner approval pipeline', () => {
       expect(anon.body.data.some((v: any) => v.id === vendorId)).toBe(false);
       expect((await request.get(`/api/vendors/${vendorId}`)).status).toBe(404);
       expect((await request.get(`/api/menus/${vendorId}`)).body.count).toBe(0);
-      const student = await request.get('/api/vendors').set(getAuthHeader(getStudentToken()));
-      expect(student.body.data.some((v: any) => v.id === vendorId)).toBe(false);
+      const client = await request.get('/api/vendors').set(getAuthHeader(getClientToken()));
+      expect(client.body.data.some((v: any) => v.id === vendorId)).toBe(false);
 
       const owner = await request.get('/api/vendors').set(getAuthHeader(token));
       expect(owner.body.data.some((v: any) => v.id === vendorId)).toBe(true);
@@ -159,7 +159,7 @@ describe('Partner approval pipeline', () => {
       expect(admin.body.data.some((v: any) => v.id === vendorId)).toBe(true);
       expect((await request.get(`/api/menus/${vendorId}`).set(adminHeader())).body.count).toBe(1);
 
-      const order = await request.post('/api/orders').set(getAuthHeader(getStudentToken())).send({ vendorId, items: [{ itemId: item.id, quantity: 1 }], dropoffHostel: 'Médina Fall' });
+      const order = await request.post('/api/orders').set(getAuthHeader(getClientToken())).send({ vendorId, items: [{ itemId: item.id, quantity: 1 }], dropoffHostel: 'Médina Fall' });
       expect(order.status).toBe(400);
       expect(order.body.message).toMatch(/not available/i);
     });
@@ -246,7 +246,7 @@ describe('Partner approval pipeline', () => {
       expect((await request.get('/api/partner/me').set(getAuthHeader(token))).status).toBe(401);
       expect((await request.get('/api/partner/me').set(getAuthHeader(fresh.body.token))).status).toBe(200);
       token = fresh.body.token;
-      expect((await request.post(`/api/admin/partners/${userId}/reset-password`).set(getAuthHeader(getStudentToken())).send({ password: 'Brand-New-Pass1' })).status).toBe(403);
+      expect((await request.post(`/api/admin/partners/${userId}/reset-password`).set(getAuthHeader(getClientToken())).send({ password: 'Brand-New-Pass1' })).status).toBe(403);
       expect((await request.post('/api/admin/partners/usr-1/reset-password').set(adminHeader()).send({ password: 'Brand-New-Pass1' })).status).toBe(404);
     });
   });
@@ -341,7 +341,7 @@ describe('Partner approval pipeline', () => {
     test('needs a boolean, a rider login, and an approved account', async () => {
       expect((await duty('yes')).status).toBe(400);
       expect((await request.post('/api/drivers/duty-status').send({ isOnline: true })).status).toBe(401);
-      expect((await duty(true, getStudentToken())).status).toBe(403);
+      expect((await duty(true, getClientToken())).status).toBe(403);
       await setStatus('driver', driverId, 'SUSPENDED', 'Testing a pause');
       expect((await duty(true)).status).toBe(401); // the suspended session is revoked
       __resetLoginLimiter();
@@ -379,7 +379,7 @@ describe('Partner approval pipeline', () => {
 
       // Before: customers see it and can order.
       expect((await request.get('/api/vendors')).body.data.some((v: any) => v.id === vendorId)).toBe(true);
-      const ok = await request.post('/api/orders').set(getAuthHeader(getStudentToken())).send({ vendorId, items: [{ itemId: item.id, quantity: 1 }], dropoffHostel: 'Médina Fall' });
+      const ok = await request.post('/api/orders').set(getAuthHeader(getClientToken())).send({ vendorId, items: [{ itemId: item.id, quantity: 1 }], dropoffHostel: 'Médina Fall' });
       expect(ok.status).toBe(201);
 
       await setStatus('vendor', vendorId, 'SUSPENDED', 'Hygiene complaint');
@@ -387,7 +387,7 @@ describe('Partner approval pipeline', () => {
       // After: hidden, closed, new orders refused, the owner cannot work, the admin still sees everything.
       expect((await request.get('/api/vendors')).body.data.some((v: any) => v.id === vendorId)).toBe(false);
       expect((await prisma.vendor.findUniqueOrThrow({ where: { id: vendorId } })).isAcceptingOrders).toBe(false);
-      const refused = await request.post('/api/orders').set(getAuthHeader(getStudentToken())).send({ vendorId, items: [{ itemId: item.id, quantity: 1 }], dropoffHostel: 'Médina Fall' });
+      const refused = await request.post('/api/orders').set(getAuthHeader(getClientToken())).send({ vendorId, items: [{ itemId: item.id, quantity: 1 }], dropoffHostel: 'Médina Fall' });
       expect(refused.status).toBe(400);
       expect((await request.patch(`/api/orders/${live.id}/status`).set(getAuthHeader(token)).send({ status: 'ACCEPTED' })).status).toBe(401); // session revoked
       __resetLoginLimiter();
@@ -443,7 +443,7 @@ describe('Partner approval pipeline', () => {
       expect(res.status).toBe(200);
       const actions = new Set(res.body.data.map((a: any) => a.action));
       for (const a of ['PARTNER_APPROVED', 'PARTNER_REJECTED', 'PARTNER_SUSPENDED', 'PASSWORD_RESET', 'PARTNER_CREATED']) expect(actions.has(a)).toBe(true);
-      expect((await request.get('/api/admin/audit-log').set(getAuthHeader(getStudentToken()))).status).toBe(403);
+      expect((await request.get('/api/admin/audit-log').set(getAuthHeader(getClientToken()))).status).toBe(403);
     });
   });
 
@@ -452,7 +452,7 @@ describe('Partner approval pipeline', () => {
 
     beforeAll(async () => {
       const customer = await prisma.user.create({
-        data: { name: 'Aarav Mehta', email: 'aarav@kraveo.test', googleSub: 'g-aarav-detail', phone: '+221 779000451', role: 'STUDENT', isStudent: true, hostelBlock: 'Cité Lamy', avatarId: 7, kraveoCoins: 40 },
+        data: { name: 'Aarav Mehta', email: 'aarav@kraveo.test', googleSub: 'g-aarav-detail', phone: '+221 779000451', role: 'CLIENT', isStudent: true, hostelBlock: 'Cité Lamy', avatarId: 7, kraveoCoins: 40 },
       });
       customerId = customer.id;
       const paid = await prisma.order.create({
@@ -473,7 +473,7 @@ describe('Partner approval pipeline', () => {
 
     test('only an admin can list customers', async () => {
       expect((await request.get('/api/admin/customers')).status).toBe(401);
-      expect((await request.get('/api/admin/customers').set(getAuthHeader(getStudentToken()))).status).toBe(403);
+      expect((await request.get('/api/admin/customers').set(getAuthHeader(getClientToken()))).status).toBe(403);
     });
 
     test('the list has profile fields, order counts and money spent; search finds by name, email, phone and hostel', async () => {

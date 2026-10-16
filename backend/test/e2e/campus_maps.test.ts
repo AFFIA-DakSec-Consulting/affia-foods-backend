@@ -12,21 +12,21 @@ import { Socket } from 'socket.io-client';
 import { Role } from '@prisma/client';
 import { startTestServer, stopTestServer, TestServerInstance } from '../harness/app';
 import { prisma, seedTestDatabase, cleanTestOrders, cleanTestUsers } from '../harness/db';
-import { getStudentToken, getVendorToken, getDriverToken, getAdminToken, getAuthHeader } from '../harness/auth';
+import { getClientToken, getVendorToken, getDriverToken, getAdminToken, getAuthHeader } from '../harness/auth';
 import { connectTestSocket, disconnectTestSocket } from '../harness/socket';
 import {
-  DROP_POINTS, CAMPUS_CENTER, normalizeDropPoint, dropPointCoords, isNearCampus, vendorHasLocation, distanceKm, checkVendorLocation,
+  DROP_POINTS, CAMPUS_CENTER, normalizeDropPoint, dropPointCoords, validPin, dropoffView, inSenegal, vendorHasLocation, distanceKm, checkVendorLocation,
 } from '../../src/config/campus';
 
 jest.setTimeout(30_000);
 
-const STUDENT = { id: 'usr-1', phone: '+221 776543210' };
-const CAMPUS_STUDENT = { id: 'usr-campus-stu', phone: '+221 779877001' };
+const CLIENT = { id: 'usr-1', phone: '+221 776543210' };
+const CAMPUS_CLIENT = { id: 'usr-campus-stu', phone: '+221 779877001' };
 const VENDOR = { id: 'usr-3', phone: '+221 776543212' };
 const RIDER = { id: 'usr-4', phone: '+221 776543213' };
 const ADMIN = { id: 'usr-5', phone: '+221 776543214' };
-const tStudent = getStudentToken(STUDENT.id, STUDENT.phone);
-const tCampusStudent = getStudentToken(CAMPUS_STUDENT.id, CAMPUS_STUDENT.phone);
+const tClient = getClientToken(CLIENT.id, CLIENT.phone);
+const tCampusClient = getClientToken(CAMPUS_CLIENT.id, CAMPUS_CLIENT.phone);
 const tVendor = getVendorToken(VENDOR.id, VENDOR.phone);
 const tRider = getDriverToken(RIDER.id, RIDER.phone);
 const tAdmin = getAdminToken(ADMIN.id, ADMIN.phone);
@@ -37,64 +37,49 @@ const CANON = ['Escale', 'Médina Fall', 'Grand Thiès', 'Cité Ndiaye', 'Dixiè
 
 // ---------------------------------------------------------------------------------------------------------------
 describe('campus.ts (pure)', () => {
-  test('the drop point list is exactly the table of quartiers, in order', () => {
-    expect(DROP_POINTS.map((p) => p.name)).toEqual(CANON);
-    expect(DROP_POINTS.every((p) => p.id === p.name)).toBe(true);
-    expect(DROP_POINTS.filter((p) => p.group === 'centre').map((p) => p.name)).toEqual(['Escale', 'Médina Fall', 'Grand Thiès', 'Cité Ndiaye', 'Dixième']);
-    expect(DROP_POINTS.filter((p) => p.group === 'nord')).toHaveLength(4);
-    expect(DROP_POINTS.filter((p) => p.group === 'sud')).toHaveLength(5);
-    expect(dropPointCoords('Escale')).toEqual({ lat: 14.7886, lng: -16.926 });
-    expect(dropPointCoords('Thiès Nord')).toEqual({ lat: 14.8066, lng: -16.928 });
-    expect(dropPointCoords('thies nord')).toEqual(dropPointCoords('Thiès Nord'));
-    expect(dropPointCoords('Gare de Dakar')).toBeNull();
-  });
-
-  test('every quartier has its own pin and the centre is the mean of the pins, close to Escale', () => {
-    expect(new Set(DROP_POINTS.map((p) => `${p.lat},${p.lng}`)).size).toBe(DROP_POINTS.length);
-    expect(CAMPUS_CENTER.lat).toBeCloseTo(DROP_POINTS.reduce((s, p) => s + p.lat, 0) / DROP_POINTS.length, 9);
-    expect(CAMPUS_CENTER.lng).toBeCloseTo(DROP_POINTS.reduce((s, p) => s + p.lng, 0) / DROP_POINTS.length, 9);
-    expect(distanceKm(CAMPUS_CENTER, { lat: 14.7886, lng: -16.926 })).toBeLessThan(1.5);
+  test('there is no default list of drop points: the customer saves, reuses or types an address', () => {
+    expect(DROP_POINTS).toHaveLength(0);
+    expect(dropPointCoords('Escale')).toBeNull();
+    expect(dropPointCoords('anything')).toBeNull();
+    expect(CAMPUS_CENTER).toEqual({ lat: 14.7886, lng: -16.926 }); // the centre of Thiès still frames the map
   });
 
   const accepted: [unknown, string][] = [
-    ...CANON.map((n) => [n, n] as [unknown, string]),
-    ['escale', 'Escale'], ['ESCALE', 'Escale'], ['  Escale  ', 'Escale'],
-    // accents, case, hyphens and extra spaces are ignored
-    ['thies nord', 'Thiès Nord'], ['THIES NORD', 'Thiès Nord'], ['Thiès-Nord', 'Thiès Nord'], ['thies   sud', 'Thiès Sud'],
-    ['randoulene', 'Randoulène'], ['RANDOULÈNE', 'Randoulène'], ['cite lamy', 'Cité Lamy'], ['Cité-Lamy', 'Cité Lamy'], ['cite_ndiaye', 'Cité Ndiaye'],
-    ['medina fall', 'Médina Fall'], ['grand thies', 'Grand Thiès'], ['dixieme', 'Dixième'], ['keur mame el hadji', 'Keur Mame El Hadji'],
-    ['parcelles  assainies', 'Parcelles Assainies'], ['mbour 1', 'Mbour 1'], ['DIAKHAO', 'Diakhao'], ['Block\t3'.replace('Block\t3', 'Mbour\t1'), 'Mbour 1'],
+    ['Escale', 'Escale'], ['  Escale  ', 'Escale'], ['Cité   Lamy', 'Cité Lamy'], ['Cité\tLamy', 'Cité Lamy'],
+    ['123 Rue Custom, Thiès', '123 Rue Custom, Thiès'], ['Près de la gare, Thiès Nord', 'Près de la gare, Thiès Nord'], ['ab', 'ab'], ['x'.repeat(200), 'x'.repeat(200)],
   ];
-  test.each(accepted)('accepts %j -> %j', (raw, canonical) => {
-    expect(normalizeDropPoint(raw)).toBe(canonical);
-    expect(normalizeDropPoint(canonical)).toBe(canonical); // idempotent
+  test.each(accepted)('accepts %j -> %j', (raw, clean) => {
+    expect(normalizeDropPoint(raw)).toBe(clean);
+    expect(normalizeDropPoint(clean)).toBe(clean); // idempotent
   });
 
-  const rejected: unknown[] = [
-    'Gare de Dakar', 'gare de dakar', 'Dakar', 'Mbour 0', 'Mbour 2', 'Mbour', 'Thiès', 'Thies Est', 'Randoulene Sud', 'Escale2', 'Esc ale',
-    'BH1', 'Block 1', 'Boys Hostel Block 3', 'Girls Gate 1', '', '   ', 'Library', 'Escale; DROP TABLE', 'Escale\nCité Lamy',
-    'x'.repeat(500), null, undefined, 2, true, {}, ['Escale'],
-  ];
+  const rejected: unknown[] = ['', '   ', 'x', 'Escale\nCité Lamy', 'a\u0000b', '<script>alert(1)</script>', 'a>b', 'x'.repeat(201), 'x'.repeat(500), null, undefined, 2, true, {}, ['Escale']];
   test.each(rejected.map((r) => [typeof r === 'string' ? r.slice(0, 30) : r, r]))('rejects %j', (_label, raw) => {
     expect(normalizeDropPoint(raw)).toBeNull();
-    expect(dropPointCoords(raw)).toBeNull();
   });
 
-  test('isNearCampus: 8 km around the centre of Thies, only real numbers', () => {
-    expect(isNearCampus(14.79, -16.93)).toBe(true);
-    expect(isNearCampus(CAMPUS_CENTER.lat, CAMPUS_CENTER.lng)).toBe(true);
-    for (const p of DROP_POINTS) expect(isNearCampus(p.lat, p.lng)).toBe(true);
-    expect(isNearCampus(14.7886, -16.926)).toBe(true); // the placeholder pin is in the zone (it is just not "real")
-    expect(isNearCampus(14.6937, -17.4441)).toBe(false); // Dakar
-    expect(isNearCampus(14.4167, -16.9667)).toBe(false); // Mbour
-    expect(isNearCampus(23.0768, 76.8524)).toBe(false); // the old campus
-    expect(isNearCampus(0, 0)).toBe(false);
-    // ~7.9 km north is in, ~8.1 km north is out (1 deg lat ~ 111.19 km)
-    expect(isNearCampus(CAMPUS_CENTER.lat + 7.9 / 111.19, CAMPUS_CENTER.lng)).toBe(true);
-    expect(isNearCampus(CAMPUS_CENTER.lat + 8.1 / 111.19, CAMPUS_CENTER.lng)).toBe(false);
+  test('validPin and dropoffView: a pin is complete and real, and travels with the address', () => {
+    expect(validPin(14.79, -16.93)).toBe(true);
+    for (const [la, ln] of [[14.79, undefined], ['14.79', -16.93], [NaN, 1], [91, 0], [0, 181], [null, null]] as [unknown, unknown][]) expect(validPin(la, ln)).toBe(false);
+    expect(dropoffView('12 Rue X', 14.79, -16.93)).toEqual({ name: '12 Rue X', lat: 14.79, lng: -16.93 });
+    expect(dropoffView('12 Rue X')).toBeNull();
+    expect(dropoffView('12 Rue X', 14.79, undefined)).toBeNull();
+    expect(dropoffView('', 14.79, -16.93)).toBeNull();
+  });
+
+  test('inSenegal: the whole country is served; only real numbers inside the box of Senegal count', () => {
+    expect(inSenegal(14.79, -16.93)).toBe(true); // Thiès
+    expect(inSenegal(CAMPUS_CENTER.lat, CAMPUS_CENTER.lng)).toBe(true);
+    expect(inSenegal(14.6937, -17.4441)).toBe(true); // Dakar
+    expect(inSenegal(14.4167, -16.9667)).toBe(true); // Mbour
+    expect(inSenegal(16.0179, -16.4896)).toBe(true); // Saint-Louis
+    expect(inSenegal(12.5681, -16.2719)).toBe(true); // Ziguinchor
+    expect(inSenegal(48.8566, 2.3522)).toBe(false); // Paris
+    expect(inSenegal(23.0768, 76.8524)).toBe(false); // the old campus
+    expect(inSenegal(0, 0)).toBe(false);
     expect(distanceKm(CAMPUS_CENTER, { lat: CAMPUS_CENTER.lat + 1 / 111.19, lng: CAMPUS_CENTER.lng })).toBeCloseTo(1, 1);
-    for (const bad of [NaN, Infinity, '14.79', null, undefined, 91, -91]) expect(isNearCampus(bad, -16.93)).toBe(false);
-    expect(isNearCampus(14.79, 181)).toBe(false);
+    for (const bad of [NaN, Infinity, '14.79', null, undefined, 91, -91]) expect(inSenegal(bad, -16.93)).toBe(false);
+    expect(inSenegal(14.79, 181)).toBe(false);
   });
 
   test('vendorHasLocation: the schema placeholder and non-numbers are not a real pin', () => {
@@ -112,7 +97,8 @@ describe('campus.ts (pure)', () => {
     expect(checkVendorLocation(91, -16.93)).toMatchObject({ ok: false, field: 'lat' });
     expect(checkVendorLocation(14.79, 'x')).toMatchObject({ ok: false, field: 'lng' });
     expect(checkVendorLocation(14.79, 181)).toMatchObject({ ok: false, field: 'lng' });
-    expect(checkVendorLocation(14.6937, -17.4441)).toMatchObject({ ok: false, field: 'location' });
+    expect(checkVendorLocation(14.6937, -17.4441)).toEqual({ ok: true, lat: 14.6937, lng: -17.4441 }); // Dakar: the whole country is served
+    expect(checkVendorLocation(48.8566, 2.3522)).toMatchObject({ ok: false, field: 'location', message: 'The location must be inside Senegal.' });
     expect(checkVendorLocation(undefined, undefined)).toMatchObject({ ok: false, field: 'lat' });
   });
 });
@@ -128,7 +114,7 @@ describe('Campus maps API', () => {
     return s;
   };
 
-  const place = (extra: Record<string, unknown> = {}, token = tStudent) =>
+  const place = (extra: Record<string, unknown> = {}, token = tClient) =>
     request.post('/api/orders').set(H(token)).send({ vendorId: 'ven-1', items: [{ itemId: 'item-1', quantity: 1 }], clientRequestId: randomUUID(), ...extra });
   const setPin = (lat: number, lng: number) => prisma.vendor.update({ where: { id: 'ven-1' }, data: { lat, lng } });
   const PLACEHOLDER = { lat: 14.7886, lng: -16.926 };
@@ -138,11 +124,11 @@ describe('Campus maps API', () => {
     await cleanTestUsers();
     await seedTestDatabase();
     await prisma.adminAuditLog.deleteMany({});
-    await prisma.user.update({ where: { id: STUDENT.id }, data: { hostelBlock: 'Randoulène', isStudent: true } });
+    await prisma.user.update({ where: { id: CLIENT.id }, data: { hostelBlock: 'Randoulène', isStudent: true } });
     await prisma.user.upsert({
-      where: { id: CAMPUS_STUDENT.id },
+      where: { id: CAMPUS_CLIENT.id },
       update: { hostelBlock: 'cite lamy', isStudent: true },
-      create: { id: CAMPUS_STUDENT.id, name: 'Meera Campus', phone: CAMPUS_STUDENT.phone, role: Role.STUDENT, isStudent: true, avatarId: 3, hostelBlock: 'cite lamy' },
+      create: { id: CAMPUS_CLIENT.id, name: 'Meera Campus', phone: CAMPUS_CLIENT.phone, role: Role.CLIENT, isStudent: true, avatarId: 3, hostelBlock: 'cite lamy' },
     });
     server = await startTestServer(0);
     request = supertest(server.app);
@@ -160,7 +146,7 @@ describe('Campus maps API', () => {
 
   afterAll(async () => {
     await setPin(PLACEHOLDER.lat, PLACEHOLDER.lng);
-    await prisma.user.update({ where: { id: STUDENT.id }, data: { hostelBlock: 'Randoulène' } });
+    await prisma.user.update({ where: { id: CLIENT.id }, data: { hostelBlock: 'Randoulène' } });
     await stopTestServer(server);
   });
 
@@ -170,90 +156,81 @@ describe('Campus maps API', () => {
       expect((await request.get('/api/campus')).status).toBe(401);
     });
 
-    test.each([['student', tStudent], ['vendor', tVendor], ['rider', tRider], ['admin', tAdmin]])('%s gets the 14 quartiers and the centre', async (_r, token) => {
+    test.each([['client', tClient], ['vendor', tVendor], ['rider', tRider], ['admin', tAdmin]])('%s gets no default drop points, the city and the centre', async (_r, token) => {
       const res = await request.get('/api/campus').set(H(token));
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
-      expect(res.headers['cache-control']).toMatch(/max-age=300/);
+      expect(res.headers['cache-control']).toMatch(/max-age=60/);
       expect(res.body.data.center).toEqual({ lat: CAMPUS_CENTER.lat, lng: CAMPUS_CENTER.lng });
-      expect(res.body.data.dropPoints).toHaveLength(14);
+      expect(res.body.data.dropPoints).toEqual([]);
       expect(res.body.data.city).toBe('Thiès');
-      expect(res.body.data.dropPoints.map((p: any) => p.name)).toEqual(CANON);
-      expect(res.body.data.dropPoints[0]).toEqual({ id: 'Escale', name: 'Escale', group: 'centre', lat: 14.7886, lng: -16.926 });
-      expect(res.body.data.dropPoints[13]).toEqual({ id: 'Diakhao', name: 'Diakhao', group: 'sud', lat: 14.7726, lng: -16.938 });
+      expect(res.body.data.service).toMatchObject({ mode: 'COUNTRY', areas: [], pinRequired: false, country: { name: 'Sénégal' } }); // all of Senegal by default
     });
   });
 
   // ------------------------------------------------------------------------------------------ order create
-  describe('order creation stores the canonical drop point', () => {
-    test.each([
-      ['cite lamy', 'Cité Lamy'], ['  thies   nord ', 'Thiès Nord'], ['RANDOULENE', 'Randoulène'], ['Médina Fall', 'Médina Fall'],
-      ['keur-mame-el-hadji', 'Keur Mame El Hadji'], ['Mbour 1', 'Mbour 1'], ['grand thies', 'Grand Thiès'], ['diakhao', 'Diakhao'],
-    ])('%j is saved as %j', async (input, canonical) => {
+  describe('order creation takes any readable address, with an optional GPS pin', () => {
+    test.each([['  Cité   Lamy ', 'Cité Lamy'], ['123 Rue Custom, Thiès', '123 Rue Custom, Thiès'], ['Près de la gare', 'Près de la gare']])('%j is saved as %j', async (input, clean) => {
       const res = await place({ dropoffHostel: input });
       expect(res.status).toBe(201);
-      expect(res.body.data.dropoffHostel).toBe(canonical);
-      expect(res.body.data.dropoff).toEqual({ name: canonical, ...dropPointCoords(canonical)! });
-      const row = await prisma.order.findUniqueOrThrow({ where: { id: res.body.data.id } });
-      expect(row.dropoffHostel).toBe(canonical);
+      expect(res.body.data.dropoffHostel).toBe(clean);
+      expect(res.body.data.dropoff).toBeNull(); // no pin sent: the text alone
+      expect((await prisma.order.findUniqueOrThrow({ where: { id: res.body.data.id } })).dropoffHostel).toBe(clean);
     });
 
-    test.each(['Gare de Dakar', 'Mbour 9', 'Block 2', 'Library', '', 'BH9'])('%j is refused with the same message and field as before', async (input) => {
+    test('a GPS pin is stored and shown with the address in every view', async () => {
+      const res = await place({ dropoffHostel: 'Chez moi', lat: 14.79, lng: -16.93 });
+      expect(res.status).toBe(201);
+      expect(res.body.data.dropoff).toEqual({ name: 'Chez moi', lat: 14.79, lng: -16.93 });
+      const row = await prisma.order.findUniqueOrThrow({ where: { id: res.body.data.id } });
+      expect([row.dropoffLat, row.dropoffLng]).toEqual([14.79, -16.93]);
+    });
+
+    test.each(['', 'x', '<b>x</b>', 'Escale\nCité', 'x'.repeat(201)])('%j is refused (field dropoffHostel)', async (input) => {
       const res = await place({ dropoffHostel: input });
       expect(res.status).toBe(400);
       expect(res.body.field).toBe('dropoffHostel');
-      expect(res.body.message).toBe('Choose one of the delivery quartiers.');
+      expect(res.body.message).toMatch(/delivery address/);
     });
 
-    test('a non-string drop point is refused', async () => {
+    test('a non-string address and a broken pin are refused', async () => {
       for (const v of [5, {}, ['Escale'], true]) expect((await place({ dropoffHostel: v })).status).toBe(400);
-    });
-
-    test('no drop point in the request falls back to the profile one (legacy text normalised)', async () => {
-      const res = await place({}); // usr-1 profile: "Randoulène"
-      expect(res.status).toBe(201);
-      expect(res.body.data.dropoffHostel).toBe('Randoulène');
-      const r2 = await place({}, tCampusStudent); // "cite lamy"
-      expect(r2.body.data.dropoffHostel).toBe('Cité Lamy');
-    });
-
-    test('a profile without a usable drop point cannot order without choosing one', async () => {
-      await prisma.user.update({ where: { id: CAMPUS_STUDENT.id }, data: { hostelBlock: 'Gare de Dakar' } });
-      try {
-        const res = await place({}, tCampusStudent);
-        expect(res.status).toBe(400);
-        expect(res.body.field).toBe('dropoffHostel');
-      } finally {
-        await prisma.user.update({ where: { id: CAMPUS_STUDENT.id }, data: { hostelBlock: 'cite lamy' } });
+      for (const pin of [{ lat: 14.79 }, { lng: -16.93 }, { lat: 91, lng: 0 }, { lat: 14.79, lng: 181 }, { lat: '14.79', lng: '-16.93' }]) {
+        const r = await place({ dropoffHostel: 'Chez moi', ...pin });
+        expect([r.status, r.body.field]).toEqual([400, 'lat']);
       }
     });
 
-    test('idempotent replay compares canonical names (any spelling of a quartier is the same place)', async () => {
+    test('no address in the request falls back to the profile one', async () => {
+      const res = await place({}); // usr-1 profile: "Randoulène"
+      expect(res.status).toBe(201);
+      expect(res.body.data.dropoffHostel).toBe('Randoulène');
+      const r2 = await place({}, tCampusClient); // "cite lamy"
+      expect(r2.body.data.dropoffHostel).toBe('cite lamy');
+    });
+
+    test('a profile without an address cannot order without giving one', async () => {
+      await prisma.user.update({ where: { id: CAMPUS_CLIENT.id }, data: { hostelBlock: null } });
+      try {
+        const res = await place({}, tCampusClient);
+        expect(res.status).toBe(400);
+        expect(res.body.field).toBe('dropoffHostel');
+      } finally {
+        await prisma.user.update({ where: { id: CAMPUS_CLIENT.id }, data: { hostelBlock: 'cite lamy' } });
+      }
+    });
+
+    test('idempotent replay: the same address (spacing aside) is the same request', async () => {
       const clientRequestId = randomUUID();
-      const first = await place({ dropoffHostel: 'cite lamy', clientRequestId });
+      const first = await place({ dropoffHostel: 'Cité Lamy', clientRequestId });
       expect(first.status).toBe(201);
-      const again = await place({ dropoffHostel: 'Cité Lamy', clientRequestId });
+      const again = await place({ dropoffHostel: '  Cité   Lamy ', clientRequestId });
       expect(again.status).toBe(200);
       expect(again.body.idempotentReplay).toBe(true);
       expect(again.body.data.id).toBe(first.body.data.id);
-      const third = await place({ dropoffHostel: 'CITÉ-LAMY', clientRequestId });
-      expect(third.status).toBe(200);
-      expect(third.body.data.id).toBe(first.body.data.id);
     });
 
-    test('replay of an order whose stored text is another spelling of the quartier still matches', async () => {
-      const clientRequestId = randomUUID();
-      const first = await place({ dropoffHostel: 'Cité Lamy', clientRequestId });
-      await prisma.order.update({ where: { id: first.body.data.id }, data: { dropoffHostel: 'cite lamy' } });
-      const again = await place({ dropoffHostel: 'Cité Lamy', clientRequestId });
-      expect(again.status).toBe(200);
-      expect(again.body.data.id).toBe(first.body.data.id);
-      const legacy = await place({ dropoffHostel: 'cite lamy', clientRequestId });
-      expect(legacy.status).toBe(200);
-      expect(legacy.body.data.id).toBe(first.body.data.id);
-    });
-
-    test('the same request id with a DIFFERENT drop point is still a mismatch', async () => {
+    test('the same request id with a DIFFERENT address is a mismatch', async () => {
       const clientRequestId = randomUUID();
       expect((await place({ dropoffHostel: 'Cité Lamy', clientRequestId })).status).toBe(201);
       const other = await place({ dropoffHostel: 'Randoulène', clientRequestId });
@@ -263,88 +240,72 @@ describe('Campus maps API', () => {
   });
 
   // ------------------------------------------------------------------------------------------ profile
-  describe('profile update stores the canonical drop point', () => {
-    const put = (body: object, token = tCampusStudent) => request.put('/api/auth/profile').set(H(token)).send(body);
-    afterEach(async () => { await prisma.user.update({ where: { id: CAMPUS_STUDENT.id }, data: { hostelBlock: 'cite lamy', isStudent: true } }); });
+  describe('profile address', () => {
+    const put = (body: object, token = tCampusClient) => request.put('/api/auth/profile').set(H(token)).send(body);
+    afterEach(async () => { await prisma.user.update({ where: { id: CAMPUS_CLIENT.id }, data: { hostelBlock: 'cite lamy', isStudent: true } }); });
 
-    test.each([['randoulene', 'Randoulène'], ['Médina Fall', 'Médina Fall'], ['thies sud', 'Thiès Sud'], [' parcelles   assainies ', 'Parcelles Assainies'], ['Mbour 1', 'Mbour 1']])('%j -> %j', async (input, canonical) => {
+    test.each([[' parcelles   assainies ', 'parcelles assainies'], ['Médina Fall', 'Médina Fall'], ['12 Rue Y, Thiès', '12 Rue Y, Thiès']])('%j is stored as %j', async (input, clean) => {
       const res = await put({ hostelBlock: input });
       expect(res.status).toBe(200);
-      expect((await prisma.user.findUniqueOrThrow({ where: { id: CAMPUS_STUDENT.id } })).hostelBlock).toBe(canonical);
+      expect((await prisma.user.findUniqueOrThrow({ where: { id: CAMPUS_CLIENT.id } })).hostelBlock).toBe(clean);
     });
 
-    test.each(['Gare de Dakar', 'Mbour 9', 'Nowhere', ''])('%j is refused (field hostelBlock)', async (input) => {
+    test.each(['', 'x', '<script>', 'a\nb', 'x'.repeat(201)])('%j is refused (field hostelBlock)', async (input) => {
       const res = await put({ hostelBlock: input });
       expect(res.status).toBe(400);
       expect(res.body.field).toBe('hostelBlock');
-      expect(res.body.message).toBe('Choose one of the delivery quartiers.');
-      expect((await prisma.user.findUniqueOrThrow({ where: { id: CAMPUS_STUDENT.id } })).hostelBlock).toBe('cite lamy'); // untouched
+      expect((await prisma.user.findUniqueOrThrow({ where: { id: CAMPUS_CLIENT.id } })).hostelBlock).toBe('cite lamy'); // untouched
     });
 
-    test('any customer chooses a quartier: being a student does not matter in Thiès', async () => {
+    test('being a student does not matter in Thiès', async () => {
       const res = await put({ isStudent: false, hostelBlock: 'Thiès Nord' });
       expect(res.status).toBe(200);
-      expect((await prisma.user.findUniqueOrThrow({ where: { id: CAMPUS_STUDENT.id } })).hostelBlock).toBe('Thiès Nord');
+      expect((await prisma.user.findUniqueOrThrow({ where: { id: CAMPUS_CLIENT.id } })).hostelBlock).toBe('Thiès Nord');
     });
   });
 
   // ------------------------------------------------------------------------------------------ OrderView
   describe('OrderView: dropoff and vendor.hasLocation', () => {
-    test('every viewer sees dropoff exactly where they see dropoffHostel; hasLocation follows the vendor pin', async () => {
-      const placed = await place({ dropoffHostel: 'Cité Ndiaye' });
+    test('every viewer sees the same dropoff; hasLocation follows the vendor pin', async () => {
+      const placed = await place({ dropoffHostel: 'Cité Ndiaye', lat: 14.795, lng: -16.931 });
       const id = placed.body.data.id as string;
-      const want = { name: 'Cité Ndiaye', ...dropPointCoords('Cité Ndiaye')! };
+      const want = { name: 'Cité Ndiaye', lat: 14.795, lng: -16.931 };
       expect(placed.body.data.dropoff).toEqual(want);
       expect(placed.body.data.vendor.hasLocation).toBe(false); // placeholder pin
       expect(placed.body.data.vendor.lat).toBe(PLACEHOLDER.lat);
 
       // pay it so the vendor and the rider pool can see it (direct DB, the payment flow has its own tests)
       await prisma.order.update({ where: { id }, data: { paymentStatus: 'PAID', paidAt: new Date(), status: 'ACCEPTED' } });
-      const asAdmin = await request.get(`/api/orders/${id}`).set(H(tAdmin));
-      const asVendor = await request.get(`/api/orders/${id}`).set(H(tVendor));
-      const asPoolRider = await request.get(`/api/orders/${id}`).set(H(tRider));
-      for (const r of [asAdmin, asVendor, asPoolRider]) {
+      for (const t of [tAdmin, tVendor, tRider]) {
+        const r = await request.get(`/api/orders/${id}`).set(H(t));
         expect(r.status).toBe(200);
         expect(r.body.data.dropoff).toEqual(want);
         expect(r.body.data.dropoffHostel).toBe('Cité Ndiaye');
         expect(r.body.data.vendor.hasLocation).toBe(false);
       }
-      expect(asAdmin.body.data.vendor).toHaveProperty('hasLocation', false);
 
       await setPin(14.7945, -16.959);
-      for (const t of [tStudent, tAdmin, tVendor, tRider]) {
+      for (const t of [tClient, tAdmin, tVendor, tRider]) {
         const r = await request.get(`/api/orders/${id}`).set(H(t));
         expect(r.body.data.vendor).toMatchObject({ lat: 14.7945, lng: -16.959, hasLocation: true });
       }
-      // the list endpoint uses the same view
-      const list = await request.get('/api/orders').set(H(tStudent));
+      const list = await request.get('/api/orders').set(H(tClient));
       const row = list.body.data.find((o: any) => o.id === id);
       expect(row.dropoff).toEqual(want);
       expect(row.vendor.hasLocation).toBe(true);
     });
 
-    test('a stored value that cannot be normalised gives dropoff null (and the text is still shown)', async () => {
+    test('an address without a pin gives dropoff null (and the text is still shown)', async () => {
       const placed = await place({ dropoffHostel: 'Thiès Nord' });
-      const id = placed.body.data.id as string;
-      await prisma.order.update({ where: { id }, data: { dropoffHostel: 'Gare de Dakar' } });
-      const r = await request.get(`/api/orders/${id}`).set(H(tStudent));
+      const r = await request.get(`/api/orders/${placed.body.data.id}`).set(H(tClient));
       expect(r.status).toBe(200);
-      expect(r.body.data.dropoffHostel).toBe('Gare de Dakar');
+      expect(r.body.data.dropoffHostel).toBe('Thiès Nord');
       expect(r.body.data.dropoff).toBeNull();
-    });
-
-    test('another spelling stored in the row is normalised in dropoff (not rewritten in dropoffHostel)', async () => {
-      const placed = await place({ dropoffHostel: 'Dixième' });
-      const id = placed.body.data.id as string;
-      await prisma.order.update({ where: { id }, data: { dropoffHostel: 'dixieme' } });
-      const r = await request.get(`/api/orders/${id}`).set(H(tStudent));
-      expect(r.body.data.dropoffHostel).toBe('dixieme');
-      expect(r.body.data.dropoff).toEqual({ name: 'Dixième', ...dropPointCoords('Dixième')! });
     });
 
     test('another customer still cannot see the order', async () => {
       const placed = await place({ dropoffHostel: 'Thiès Nord' });
-      expect((await request.get(`/api/orders/${placed.body.data.id}`).set(H(tCampusStudent))).status).toBe(404);
+      expect((await request.get(`/api/orders/${placed.body.data.id}`).set(H(tCampusClient))).status).toBe(404);
     });
   });
 
@@ -371,10 +332,10 @@ describe('Campus maps API', () => {
         ['b4', 'Block 12', 'Block 12'], ['b5', 'block 2', 'BH2'], ['b6', 'Unknown', 'Unknown'],
       ];
       const old = new Date('2026-01-01T00:00:00Z');
-      await prisma.user.createMany({ data: legacyUsers.map(([k, hb], i) => ({ id: marker + k, name: `Mig ${k}`, phone: `+221 7799${String(80000 + i).slice(-5)}`, role: Role.STUDENT, hostelBlock: hb })) });
+      await prisma.user.createMany({ data: legacyUsers.map(([k, hb], i) => ({ id: marker + k, name: `Mig ${k}`, phone: `+221 7799${String(80000 + i).slice(-5)}`, role: Role.CLIENT, hostelBlock: hb })) });
       const orderRows = legacyUsers.filter(([, hb]) => hb !== null);
       await prisma.order.createMany({
-        data: orderRows.map(([k, hb]) => ({ id: marker + 'o-' + k, customerId: STUDENT.id, vendorId: 'ven-1', dropoffHostel: hb as string, totalAmount: 100, status: 'CANCELLED' as const, createdAt: old, updatedAt: old })),
+        data: orderRows.map(([k, hb]) => ({ id: marker + 'o-' + k, customerId: CLIENT.id, vendorId: 'ven-1', dropoffHostel: hb as string, totalAmount: 100, status: 'CANCELLED' as const, createdAt: old, updatedAt: old })),
       });
       try {
         const run = () => prisma.$transaction(statements.filter((s) => s.startsWith('UPDATE')).map((s) => prisma.$executeRawUnsafe(s)));
@@ -405,7 +366,7 @@ describe('Campus maps API', () => {
 
     test('needs an admin', async () => {
       expect((await request.patch('/api/admin/vendors/ven-1/location').send({ lat: 14.7945, lng: -16.959 })).status).toBe(401);
-      for (const t of [tStudent, tVendor, tRider]) expect((await patch({ lat: 14.7945, lng: -16.959 }, 'ven-1', t)).status).toBe(403);
+      for (const t of [tClient, tVendor, tRider]) expect((await patch({ lat: 14.7945, lng: -16.959 }, 'ven-1', t)).status).toBe(403);
       const v = await prisma.vendor.findUniqueOrThrow({ where: { id: 'ven-1' } });
       expect([v.lat, v.lng]).toEqual([PLACEHOLDER.lat, PLACEHOLDER.lng]);
     });
@@ -440,8 +401,8 @@ describe('Campus maps API', () => {
       ['lat too small', { lat: -91, lng: -16.959 }, 'lat'],
       ['lng too big', { lat: 14.7945, lng: 181 }, 'lng'],
       ['lng too small', { lat: 14.7945, lng: -181 }, 'lng'],
-      ['Dakar (not in the delivery zone)', { lat: 14.6937, lng: -17.4441 }, 'location'],
-      ['Mbour (about 60 km)', { lat: 14.4167, lng: -16.9667 }, 'location'],
+      ['Paris (outside Senegal)', { lat: 48.8566, lng: 2.3522 }, 'location'],
+      ['Bamako (outside Senegal)', { lat: 12.6392, lng: -8.0029 }, 'location'],
       ['0,0', { lat: 0, lng: 0 }, 'location'],
       ['empty body', {}, 'lat'],
     ])('rejects %s', async (_n, body, field) => {
@@ -459,7 +420,7 @@ describe('Campus maps API', () => {
     });
 
     test('creating a vendor validates the same way (POST /api/vendors and POST /api/admin/partners)', async () => {
-      const bad = await request.post('/api/vendors').set(H(tAdmin)).send({ name: 'Far Cafe', lat: 14.69, lng: -17.44 });
+      const bad = await request.post('/api/vendors').set(H(tAdmin)).send({ name: 'Far Cafe', lat: 48.8566, lng: 2.3522 });
       expect(bad.status).toBe(400);
       expect(bad.body.field).toBe('location');
       expect((await request.post('/api/vendors').set(H(tAdmin)).send({ name: 'Half Cafe', lat: 14.7945 })).status).toBe(400);
@@ -474,7 +435,7 @@ describe('Campus maps API', () => {
       const partner = (extra: object, phone: string) => request.post('/api/admin/partners').set(H(tAdmin)).send({
         role: 'VENDOR', name: 'Owner Name', phone, password: 'Str0ng-Passw0rd!', restaurantName: 'Pin Kitchen', category: 'Rolls', address: 'Near Escale', ...extra,
       });
-      const farPartner = await partner({ lat: 14.69, lng: -17.44 }, '779877101');
+      const farPartner = await partner({ lat: 48.8566, lng: 2.3522 }, '779877101');
       expect(farPartner.status).toBe(400);
       expect(farPartner.body.field).toBe('location');
       const okPartner = await partner({ lat: 14.7945, lng: -16.959 }, '779877102');
@@ -508,11 +469,11 @@ describe('Campus maps API', () => {
       expect(off.body.data.find((r: any) => r.driverId === RIDER.id).dutyStatus).toBe('OFFLINE');
     });
 
-    test('a rider only gets their own row; students and vendors get none of anyone elses', async () => {
+    test('a rider only gets their own row; clients and vendors get none of anyone elses', async () => {
       await postLoc();
       const own = await request.get('/api/drivers/locations').set(H(tRider));
       expect(own.body.data.every((r: any) => r.driverId === RIDER.id)).toBe(true);
-      const stu = await request.get('/api/drivers/locations').set(H(tStudent));
+      const stu = await request.get('/api/drivers/locations').set(H(tClient));
       expect(stu.body.data).toEqual([]);
       expect((await request.get('/api/drivers/locations')).status).toBe(401);
     });
@@ -559,8 +520,8 @@ describe('Campus maps API', () => {
       const placed = await place({ dropoffHostel: 'Cité Lamy' });
       const id = placed.body.data.id as string;
       await prisma.order.update({ where: { id }, data: { paymentStatus: 'PAID', paidAt: new Date(), status: 'PICKED_UP', driverId: RIDER.id } });
-      const owner = await connect(tStudent);
-      const other = await connect(tCampusStudent);
+      const owner = await connect(tClient);
+      const other = await connect(tCampusClient);
       const vend = await connect(tVendor);
       const ownerGot: any[] = [];
       const otherGot: any[] = [];

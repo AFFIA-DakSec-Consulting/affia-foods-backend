@@ -1,11 +1,11 @@
 /**
- * Auth v2: Google Sign-In for students, phone + password for partners, profile, logout, delete account,
+ * Auth v2: Google Sign-In for clients, phone + password for partners, profile, logout, delete account,
  * admin-created partner accounts, order pagination. Runs against a real PostgreSQL.
  */
 import supertest from 'supertest';
 import { startTestServer, stopTestServer, TestServerInstance } from '../harness/app';
 import { prisma, seedTestDatabase, cleanTestOrders, cleanTestUsers } from '../harness/db';
-import { getAdminToken, getStudentToken, getAuthHeader } from '../harness/auth';
+import { getAdminToken, getClientToken, getAuthHeader } from '../harness/auth';
 import { setGoogleVerifier, GoogleAuthError } from '../../src/services/googleAuth';
 import { hashPassword, verifyPassword } from '../../src/services/password';
 import { __resetLoginLimiter } from '../../src/services/loginLimiter';
@@ -13,7 +13,7 @@ import { __resetLoginLimiter } from '../../src/services/loginLimiter';
 const TOKEN = 't'.repeat(40);
 const adminHeader = () => getAuthHeader(getAdminToken('usr-5', '+221 776543214'));
 
-describe('Auth v2 (Google students, password partners)', () => {
+describe('Auth v2 (Google clients, password partners)', () => {
   let server: TestServerInstance;
   let request: ReturnType<typeof supertest>;
 
@@ -77,13 +77,13 @@ describe('Auth v2 (Google students, password partners)', () => {
       expect(await prisma.user.findUnique({ where: { email: 'unverified@kraveo.test' } })).toBeNull();
     });
 
-    test('first login creates a STUDENT that still needs a profile; second login is not new', async () => {
+    test('first login creates a CLIENT that still needs a profile; second login is not new', async () => {
       const first = await googleLogin('first@kraveo.test', 'sub-first', 'Riya Kapoor');
       expect(first.status).toBe(200);
       expect(first.body.isNewUser).toBe(true);
       expect(first.body.needsProfile).toBe(true);
-      expect(first.body.user).toMatchObject({ role: 'STUDENT', email: 'first@kraveo.test', name: 'Riya Kapoor', phone: null, isStudent: null, avatarId: null });
-      expect(Object.keys(first.body.user).sort()).toEqual(['avatarId', 'email', 'hostelBlock', 'id', 'isStudent', 'kraveoCoins', 'name', 'phone', 'role']);
+      expect(first.body.user).toMatchObject({ role: 'CLIENT', email: 'first@kraveo.test', name: 'Riya Kapoor', phone: null, isStudent: null, avatarId: null });
+      expect(Object.keys(first.body.user).sort()).toEqual(['avatarId', 'email', 'hostelBlock', 'id', 'isStudent', 'kraveoCoins', 'marketingOptOut', 'name', 'phone', 'role']);
 
       const second = await googleLogin('first@kraveo.test', 'sub-first', 'Riya Kapoor');
       expect(second.body.isNewUser).toBe(false);
@@ -98,7 +98,7 @@ describe('Auth v2 (Google students, password partners)', () => {
     });
 
     test('an existing account is found by email and linked to the Google id', async () => {
-      await prisma.user.create({ data: { name: 'Pre Created', email: 'linked@kraveo.test', role: 'STUDENT' } });
+      await prisma.user.create({ data: { name: 'Pre Created', email: 'linked@kraveo.test', role: 'CLIENT' } });
       const res = await googleLogin('linked@kraveo.test', 'sub-linked');
       expect(res.status).toBe(200);
       expect(res.body.isNewUser).toBe(false);
@@ -106,7 +106,7 @@ describe('Auth v2 (Google students, password partners)', () => {
     });
   });
 
-  describe('profile (name + phone -> student? -> hostel -> avatar)', () => {
+  describe('profile (name + phone -> client? -> hostel -> avatar)', () => {
     let token: string;
     let userId: string;
     const put = (body: Record<string, unknown>) => request.put('/api/auth/profile').set(getAuthHeader(token)).send(body);
@@ -119,7 +119,7 @@ describe('Auth v2 (Google students, password partners)', () => {
 
     test.each([
       [{ name: 'A' }, 'name'],
-      [{ name: 'VIT Student' }, 'name'],
+      [{ name: 'VIT Client' }, 'name'],
       [{ name: 'x'.repeat(61) }, 'name'],
       [{ phone: '12345' }, 'phone'],
       [{ phone: '5876543210' }, 'phone'],
@@ -127,14 +127,14 @@ describe('Auth v2 (Google students, password partners)', () => {
       [{ avatarId: 16 }, 'avatarId'],
       [{ avatarId: '3' }, 'avatarId'],
       [{ isStudent: 'yes' }, 'isStudent'],
-      [{ hostelBlock: 'Roof' }, 'hostelBlock'], // not one of the quartiers
+      [{ hostelBlock: '<b>Roof</b>' }, 'hostelBlock'], // markup is not an address
     ])('rejects %j on field %s', async (body, field) => {
       const res = await put(body as Record<string, unknown>);
       expect(res.status).toBe(400);
       expect(res.body.field).toBe(field);
     });
 
-    test('student path: complete profile clears needsProfile', async () => {
+    test('client path: complete profile clears needsProfile', async () => {
       const a = await put({ name: '  Kabir   Singh ', phone: '+221 776511111' });
       expect(a.status).toBe(200);
       expect(a.body.needsProfile).toBe(true);
@@ -144,14 +144,14 @@ describe('Auth v2 (Google students, password partners)', () => {
       const b = await put({ isStudent: true });
       expect(b.body.needsProfile).toBe(true); // hostel still missing
 
-      expect((await put({ hostelBlock: 'Roof' })).status).toBe(400);
+      expect((await put({ hostelBlock: '<b>Roof</b>' })).status).toBe(400);
       const c = await put({ hostelBlock: 'Randoulène', avatarId: 7 });
       expect(c.status).toBe(200);
       expect(c.body.needsProfile).toBe(false);
       expect(c.body.user).toMatchObject({ isStudent: true, hostelBlock: 'Randoulène', avatarId: 7 });
     });
 
-    test('isStudent is optional in Thies: a customer who is not a student keeps their quartier and can change it', async () => {
+    test('isStudent is optional in Thies: a customer who is not a client keeps their quartier and can change it', async () => {
       const res = await put({ isStudent: false });
       expect(res.status).toBe(200);
       expect(res.body.user.hostelBlock).toBe('Randoulène');
@@ -169,7 +169,7 @@ describe('Auth v2 (Google students, password partners)', () => {
     test('role, coins, email and google id cannot be changed through the profile', async () => {
       await put({ role: 'ADMIN', kraveoCoins: 9999, email: 'evil@kraveo.test', googleSub: 'evil' });
       const row = await prisma.user.findUnique({ where: { id: userId } });
-      expect(row).toMatchObject({ role: 'STUDENT', kraveoCoins: 0, email: 'profile@kraveo.test', googleSub: 'sub-profile' });
+      expect(row).toMatchObject({ role: 'CLIENT', kraveoCoins: 0, email: 'profile@kraveo.test', googleSub: 'sub-profile' });
     });
 
     test('GET /auth/profile returns the public shape and never leaks secrets', async () => {
@@ -209,8 +209,8 @@ describe('Auth v2 (Google students, password partners)', () => {
     test('only ADMIN can create or list partners', async () => {
       const body = { role: 'VENDOR', name: 'Test Owner', phone, password: 'Sup3rSecret!' };
       expect((await request.post('/api/admin/partners').send(body)).status).toBe(401);
-      expect((await request.post('/api/admin/partners').set(getAuthHeader(getStudentToken())).send(body)).status).toBe(403);
-      expect((await request.get('/api/admin/partners').set(getAuthHeader(getStudentToken()))).status).toBe(403);
+      expect((await request.post('/api/admin/partners').set(getAuthHeader(getClientToken())).send(body)).status).toBe(403);
+      expect((await request.get('/api/admin/partners').set(getAuthHeader(getClientToken()))).status).toBe(403);
     });
 
     test('validation: bad role / name / phone / short password / duplicate phone', async () => {
@@ -252,11 +252,11 @@ describe('Auth v2 (Google students, password partners)', () => {
       expect(wrong.body.message).toBe(unknown.body.message);
     });
 
-    test('right password but the wrong app role -> 403; students have no password login', async () => {
+    test('right password but the wrong app role -> 403; clients have no password login', async () => {
       const wrongRole = await request.post('/api/auth/partner-login').send({ phone, password: 'Sup3rSecret!', role: 'DRIVER' });
       expect(wrongRole.status).toBe(403);
-      const student = await request.post('/api/auth/partner-login').send({ phone: '776543210', password: 'anything-at-all', role: 'VENDOR' });
-      expect(student.status).toBe(401);
+      const client = await request.post('/api/auth/partner-login').send({ phone: '776543210', password: 'anything-at-all', role: 'VENDOR' });
+      expect(client.status).toBe(401);
     });
 
     test('5 wrong passwords lock the phone for 15 minutes, even for the right password', async () => {

@@ -6,7 +6,8 @@ import { canonicalPhone, phoneKey } from '../utils/phone';
 import { hashPassword, verifyPassword, getDummyHash, passwordProblem } from '../services/password';
 import { isLocked, recordFailure, recordSuccess, ipLockedFor, recordIpFailure } from '../services/loginLimiter';
 import { rateLimitMiddleware, FailureLimiter, clientIp } from '../middleware/rateLimit';
-import { DROP_POINTS, CAMPUS_CENTER, CITY_NAME, PLACEHOLDER_VENDOR_PIN, normalizeDropPoint, checkVendorLocation, vendorHasLocation } from '../config/campus';
+import { DROP_POINTS, CAMPUS_CENTER, CITY_NAME, PLACEHOLDER_VENDOR_PIN, normalizeDropPoint, validPin, vendorHasLocation } from '../config/campus';
+import { checkCustomerPin, checkVendorPin, publicView as serviceAreasView } from '../services/serviceAreas';
 import { fail, validParams, ID_RE } from '../utils/http';
 import { errSummary } from '../utils/log';
 import { NAME_RE } from '../utils/names';
@@ -14,6 +15,14 @@ import { startOfLocalDay, localHour } from '../utils/time';
 import { dropFromPartnerRooms } from '../realtime';
 import { publicVendorView, publicMenuItem, validateMenuItemFields, priceProblem, vendorMenuItemView, isCustomerVisible } from '../utils/catalog';
 import { catalogRouter } from './catalog';
+import { modulesAdminRouter } from './modulesAdmin';
+import { supportRouter } from './support';
+import { contentRouter } from './content';
+import { serviceAreaRouter } from './serviceAreas';
+import { teamRouter } from './team';
+import { prospectRouter } from './prospects';
+import { accessMapOf, adminPermissionGuard, asAdminRole, checkSecondFactor, permissionsOf, startAdminSession, verifyPasscode } from '../services/adminTeam';
+import { decryptSecret } from '../services/payoutCrypto';
 import { financeRouter } from './finance';
 import { createDish, vendorEditDish, toggleAvailability, adminDishView, DishRow } from '../services/catalog';
 import { getSettings } from '../services/settings';
@@ -33,6 +42,8 @@ export const apiRouter = Router();
 
 // Rate limits are mounted by path, before any handler (see middleware/rateLimit.ts for the numbers).
 apiRouter.use(rateLimitMiddleware);
+// Team roles are enforced on every /api/admin route, whichever router serves it (services/adminTeam.ts).
+apiRouter.use('/admin', adminPermissionGuard);
 // Partner sign-up, applications, approval and admin customer views live in ./partners.
 apiRouter.use(partnerRouter);
 // Orders, payments, rider pool, gate OTP and the admin order tools live in ./orders.
@@ -41,6 +52,13 @@ apiRouter.use(orderRouter);
 apiRouter.use(deviceRouter);
 // Pricing, catalog approval and settings (Docs/21): restaurant menu-manage, /admin/catalog*, /admin/settings*, /admin/vendors/:id/commission.
 apiRouter.use(catalogRouter);
+apiRouter.use(modulesAdminRouter);
+apiRouter.use(supportRouter);
+// Legal documents (versions, publish, active) and help articles; the apps read GET /legal/:type and /help/articles without a token.
+apiRouter.use(contentRouter);
+apiRouter.use(teamRouter);
+apiRouter.use(prospectRouter);
+apiRouter.use(serviceAreaRouter);
 // Payout details, settlements, finance analytics and the rider payout ledger (Docs/21 phase 2).
 apiRouter.use(financeRouter);
 
@@ -104,17 +122,62 @@ apiRouter.get('/drivers/locations', requireAuth, async (req: AuthenticatedReques
   }
 });
 
-// Delivery quartiers of Thies and map centre (Docs/19; the route keeps its campus-era name). Static, so clients may cache it for a few minutes.
-apiRouter.get('/campus', requireAuth, (_req: AuthenticatedRequest, res: Response) => {
-  res.set('Cache-Control', 'private, max-age=300');
-  return res.json({
-    success: true,
-    data: {
-      city: CITY_NAME,
-      center: { lat: CAMPUS_CENTER.lat, lng: CAMPUS_CENTER.lng },
-      dropPoints: DROP_POINTS.map((p) => ({ id: p.id, name: p.name, group: p.group, lat: p.lat, lng: p.lng })),
-    },
-  });
+// Map centre, delivery quartiers (none any more) and where the app is available (Docs/27). Short cache: a change in the back-office should reach the apps quickly.
+apiRouter.get('/campus', requireAuth, async (_req: AuthenticatedRequest, res: Response) => {
+  try {
+    res.set('Cache-Control', 'private, max-age=60');
+    return res.json({
+      success: true,
+      data: {
+        city: CITY_NAME,
+        center: { lat: CAMPUS_CENTER.lat, lng: CAMPUS_CENTER.lng },
+        dropPoints: DROP_POINTS.map((p) => ({ id: p.id, name: p.name, group: p.group, lat: p.lat, lng: p.lng })),
+        service: await serviceAreasView(),
+      },
+    });
+  } catch (err) {
+    return fail(res, err, 'Error loading the service areas');
+  }
+});
+
+apiRouter.get('/auth/recent-addresses', requireAuth, requireRole('CLIENT'), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    // Extract recent unique addresses from the last 50 orders
+    const recentOrders = await prisma.order.findMany({
+      where: { customerId: userId },
+      select: {
+        dropoffHostel: true,
+        dropoffLat: true,
+        dropoffLng: true,
+        dropoffNotes: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+
+    const seen = new Set<string>();
+    const addresses = [];
+
+    for (const o of recentOrders) {
+      if (!o.dropoffHostel) continue;
+      const key = `${o.dropoffHostel}|${o.dropoffLat}|${o.dropoffLng}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        addresses.push({
+          address: o.dropoffHostel,
+          lat: o.dropoffLat,
+          lng: o.dropoffLng,
+          notes: o.dropoffNotes,
+        });
+      }
+      if (addresses.length >= 10) break;
+    }
+
+    return res.json({ success: true, data: addresses });
+  } catch (err: any) {
+    return fail(res, err, 'Error fetching recent addresses');
+  }
 });
 
 // ADMIN: the full row (phone, UPI, emergency contact, plate). A DRIVER: only their own, approved profile, and only
@@ -147,14 +210,14 @@ apiRouter.get('/drivers/:id', requireAuth, requireRole('DRIVER', 'ADMIN'), valid
 });
 
 // ----------------------------------------------------
-// AUTH: students sign in with Google, partners with phone + password (contract: Docs/15_auth_v2_contract.md)
+// AUTH: clients sign in with Google, partners with phone + password (contract: Docs/15_auth_v2_contract.md)
 // ----------------------------------------------------
-const PLACEHOLDER_NAMES = new Set(['VIT Student', 'Dhaba Owner', 'Delivery Partner', 'Client', 'Restaurant Owner']);
+const PLACEHOLDER_NAMES = new Set(['VIT Client', 'Dhaba Owner', 'Delivery Partner', 'Client', 'Restaurant Owner']);
 const AVATAR_COUNT = 15;
 
 const needsProfile = (u: { role: Role; name: string; phone?: string | null; avatarId?: number | null; isStudent?: boolean | null; hostelBlock?: string | null }) =>
-  u.role === Role.STUDENT &&
-  (!u.name || PLACEHOLDER_NAMES.has(u.name.trim()) || !u.phone || !u.avatarId || !u.hostelBlock); // every customer chooses a delivery quartier (isStudent is no longer required)
+  u.role === Role.CLIENT &&
+  (!u.name || PLACEHOLDER_NAMES.has(u.name.trim()) || !u.phone || !u.avatarId); // hostelBlock is no longer strictly required for profile completion
 
 const publicUser = (u: any) => ({
   id: u.id,
@@ -166,9 +229,10 @@ const publicUser = (u: any) => ({
   hostelBlock: u.hostelBlock ?? null,
   avatarId: u.avatarId ?? null,
   kraveoCoins: u.kraveoCoins,
+  marketingOptOut: u.marketingOptOut ?? false,
 });
 
-// Students: verify the Google ID token, find or create the account.
+// Clients: verify the Google ID token, find or create the account.
 apiRouter.post('/auth/google', async (req: Request, res: Response) => {
   try {
     const idToken = req.body?.idToken;
@@ -201,7 +265,7 @@ apiRouter.post('/auth/google', async (req: Request, res: Response) => {
     }
 
     if (user) {
-      if (user.role !== Role.STUDENT) {
+      if (user.role !== Role.CLIENT) {
         return res.status(403).json({ success: false, message: 'This Google account belongs to a Kraveo partner. Use the partner app.' });
       }
       if (user.googleSub !== identity.sub || user.email !== identity.email) {
@@ -214,7 +278,7 @@ apiRouter.post('/auth/google', async (req: Request, res: Response) => {
       }
     } else {
       user = await prisma.user.create({
-        data: { email: identity.email, googleSub: identity.sub, name: identity.name.slice(0, 60), role: Role.STUDENT },
+        data: { email: identity.email, googleSub: identity.sub, name: identity.name.slice(0, 60), role: Role.CLIENT },
       });
       isNewUser = true;
     }
@@ -268,7 +332,7 @@ apiRouter.post('/auth/partner-login', async (req: Request, res: Response) => {
       return res.status(429).json({ success: false, message: 'Too many wrong attempts. Try again later.', retryAfterSeconds: locked });
     }
 
-    const user = await prisma.user.findFirst({ where: { phone: { endsWith: key }, role: { in: [Role.VENDOR, Role.DRIVER, Role.ADMIN, Role.STUDENT] }, deletedAt: null } });
+    const user = await prisma.user.findFirst({ where: { phone: { endsWith: key }, role: { in: [Role.VENDOR, Role.DRIVER, Role.ADMIN, Role.CLIENT] }, deletedAt: null } });
     // Always run one scrypt so unknown numbers and wrong passwords take the same time.
     const ok = await verifyPassword(password, user?.passwordHash ?? (await getDummyHash()));
     if (!user || !user.passwordHash || !ok) {
@@ -306,12 +370,54 @@ apiRouter.post('/auth/partner-login', async (req: Request, res: Response) => {
 });
 
 // Admin Authentication (Passcode Login for Super Admin Dashboard)
+/** Second step of an admin sign-in, for an account that turned on the authenticator app. Answers the request itself when it refuses. */
+const passSecondFactor = async (user: { id: string; adminTotpEnabledAt: Date | null }, req: Request, res: Response, limiterKey: string): Promise<boolean> => {
+  if (!user.adminTotpEnabledAt) return true;
+  const otp = typeof req.body?.otp === 'string' ? req.body.otp.trim() : '';
+  if (!otp) {
+    res.status(401).json({ success: false, code: 'OTP_REQUIRED', message: 'Enter the code from your authenticator app, or a backup code.' });
+    return false;
+  }
+  if (await checkSecondFactor(user.id, otp, (stored) => decryptSecret(stored, `totp:${user.id}`))) return true;
+  adminLoginFailures.fail(limiterKey);
+  res.status(401).json({ success: false, code: 'OTP_INVALID', message: 'Invalid code. Access denied.' });
+  return false;
+};
+
 apiRouter.post('/auth/admin-login', async (req: Request, res: Response) => {
   try {
-    const { username, passcode } = req.body ?? {};
+    const { username, passcode, identifier } = req.body ?? {};
 
     if (!passcode) {
       return res.status(400).json({ success: false, message: 'Admin passcode is required.' });
+    }
+
+    // A team member signs in with their phone number and their personal code. Same per-IP limiter as the general code.
+    if (identifier !== undefined && identifier !== null && String(identifier).trim() !== '') {
+      const memberKey = clientIp(req);
+      const memberBlocked = adminLoginFailures.blockedFor(memberKey);
+      if (memberBlocked) {
+        return res.status(429).json({ success: false, code: 'RATE_LIMITED', message: 'Too many admin login attempts. Try again later.', retryAfterSeconds: memberBlocked });
+      }
+      const memberPhone = canonicalPhone(identifier);
+      const member = memberPhone ? await prisma.user.findFirst({ where: { role: Role.ADMIN, phone: memberPhone, deletedAt: null } }) : null;
+      // An unknown, suspended or wrong-code member all get the same answer.
+      const memberOk = Boolean(member && member.adminPasscodeHash && !member.adminDisabledAt && (await verifyPasscode(String(passcode).trim(), member.adminPasscodeHash)));
+      if (!member || !memberOk) {
+        adminLoginFailures.fail(memberKey);
+        return res.status(401).json({ success: false, message: 'Invalid phone number or personal code. Access denied.' });
+      }
+      if (!(await passSecondFactor(member, req, res, memberKey))) return undefined;
+      adminLoginFailures.clear(memberKey);
+      await prisma.user.update({ where: { id: member.id }, data: { adminLastLoginAt: new Date() } });
+      const memberRole = asAdminRole(member.adminRole);
+      const memberSession = await startAdminSession(member.id, req);
+      return res.json({
+        success: true,
+        message: 'Admin authenticated successfully.',
+        token: generateToken({ id: member.id, phone: member.phone, role: Role.ADMIN, tokenVersion: member.tokenVersion, sid: memberSession.id }),
+        admin: { id: member.id, name: member.name, role: member.role, phone: member.phone, adminRole: memberRole ?? 'SUPER_ADMIN', permissions: permissionsOf(memberRole), access: accessMapOf(memberRole) },
+      });
     }
 
     const configuredPasscode = process.env.ADMIN_PASSCODE;
@@ -335,11 +441,16 @@ apiRouter.post('/auth/admin-login', async (req: Request, res: Response) => {
       return res.status(401).json({ success: false, message: 'Invalid admin passcode. Access denied.' });
     }
 
+    // The owner may also have turned on the authenticator app.
+    const ownerRow = await prisma.user.findFirst({ where: { role: Role.ADMIN, adminPasscodeHash: null, adminDisabledAt: null }, orderBy: { createdAt: 'asc' }, select: { id: true, adminTotpEnabledAt: true } });
+    if (ownerRow && !(await passSecondFactor(ownerRow, req, res, requestKey))) return undefined;
     adminLoginFailures.clear(requestKey);
 
     // Find or create admin profile in PostgreSQL
+    // The owner is the admin without a personal code: team members never get in with the general code.
     let adminUser = await prisma.user.findFirst({
-      where: { role: Role.ADMIN }
+      where: { role: Role.ADMIN, adminPasscodeHash: null, adminDisabledAt: null },
+      orderBy: { createdAt: 'asc' },
     });
 
     if (!adminUser) {
@@ -353,11 +464,13 @@ apiRouter.post('/auth/admin-login', async (req: Request, res: Response) => {
       });
     }
 
+    const ownerSession = await startAdminSession(adminUser.id, req);
     const token = generateToken({
       id: adminUser.id,
       phone: adminUser.phone,
       role: Role.ADMIN,
       tokenVersion: adminUser.tokenVersion,
+      sid: ownerSession.id,
     });
 
     return res.json({
@@ -368,7 +481,10 @@ apiRouter.post('/auth/admin-login', async (req: Request, res: Response) => {
         id: adminUser.id,
         name: adminUser.name,
         role: adminUser.role,
-        phone: adminUser.phone
+        phone: adminUser.phone,
+        adminRole: 'SUPER_ADMIN',
+        permissions: permissionsOf(null),
+        access: accessMapOf(null),
       }
     });
   } catch (err: any) {
@@ -397,8 +513,8 @@ apiRouter.put('/auth/profile', requireAuth, async (req: AuthenticatedRequest, re
     const current = await prisma.user.findUnique({ where: { id: req.user.id } });
     if (!current) return res.status(404).json({ success: false, message: 'User profile not found.' });
 
-    const { name, phone, isStudent, hostelBlock, avatarId, upiId, fcmToken } = req.body ?? {};
-    const isStudentAccount = current.role === Role.STUDENT;
+    const { name, phone, isStudent, hostelBlock, avatarId, upiId, fcmToken, marketingOptOut } = req.body ?? {};
+    const isStudentAccount = current.role === Role.CLIENT;
     const bad = (field: string, message: string) => res.status(400).json({ success: false, field, message });
     const updateData: Record<string, any> = {};
 
@@ -424,9 +540,13 @@ apiRouter.put('/auth/profile', requireAuth, async (req: AuthenticatedRequest, re
       if (hostelBlock !== undefined) {
         // Any spelling of a quartier (case, accents and hyphens ignored) is accepted and stored as the canonical name.
         const canonical = normalizeDropPoint(hostelBlock);
-        if (!canonical) return bad('hostelBlock', 'Choose one of the delivery quartiers.');
+        if (!canonical) return bad('hostelBlock', 'Enter your delivery address or quartier (2 to 200 characters, no special symbols).');
         updateData.hostelBlock = canonical;
       }
+    }
+    if (marketingOptOut !== undefined) {
+      if (typeof marketingOptOut !== 'boolean') return bad('marketingOptOut', 'marketingOptOut must be true or false.');
+      updateData.marketingOptOut = marketingOptOut; // promotional notifications only: order updates are never affected
     }
     if (upiId !== undefined && upiId !== '') {
       // The column keeps its historical name: it now holds the customer's Wave / Orange Money number.
@@ -466,7 +586,7 @@ apiRouter.post('/auth/logout', requireAuth, async (req: AuthenticatedRequest, re
 });
 
 // Delete account (Play Store requires an in-app path). Orders/payments must keep their FK, so the row is anonymised.
-apiRouter.delete('/auth/account', requireAuth, requireRole('STUDENT'), async (req: AuthenticatedRequest, res: Response) => {
+apiRouter.delete('/auth/account', requireAuth, requireRole('CLIENT'), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user!.id;
     // Lock the account row (placing an order takes the same lock), so no order can slip in between the check and the delete.
@@ -492,6 +612,148 @@ apiRouter.delete('/auth/account', requireAuth, requireRole('STUDENT'), async (re
     return res.json({ success: true, message: 'Your account has been deleted.' });
   } catch (err: any) {
     return fail(res, err, 'Could not delete the account');
+  }
+});
+
+// Addresses Management
+/** Label of a saved address ("Maison", "Bureau"): 2 to 50 readable characters. null = refused. */
+const cleanAddressLabel = (raw: unknown): string | null => {
+  if (typeof raw !== 'string') return null;
+  const t = raw.trim().replace(/\s+/g, ' ');
+  return t.length >= 2 && t.length <= 50 && !/[\u0000-\u001f\u007f<>]/.test(t) ? t : null;
+};
+
+apiRouter.get('/auth/addresses', requireAuth, requireRole('CLIENT'), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const addresses = await prisma.address.findMany({
+      where: { userId: req.user!.id },
+      orderBy: { createdAt: 'desc' }
+    });
+    return res.json({ success: true, data: addresses });
+  } catch (err: any) {
+    return fail(res, err, 'Error fetching addresses');
+  }
+});
+
+apiRouter.post('/auth/addresses', requireAuth, requireRole('CLIENT'), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { label, address, isDefault, lat, lng } = req.body ?? {};
+    if (!label || !address) {
+      return res.status(400).json({ success: false, message: 'Label and address are required.' });
+    }
+    const cleanLabel = cleanAddressLabel(label);
+    if (!cleanLabel) return res.status(400).json({ success: false, field: 'label', message: 'The label is 2 to 50 characters, without special symbols.' });
+    const cleanAddress = normalizeDropPoint(address);
+    if (!cleanAddress) return res.status(400).json({ success: false, field: 'address', message: 'Enter an address (2 to 200 characters, no special symbols).' });
+    if ((lat !== undefined && lat !== null) !== (lng !== undefined && lng !== null) || (lat != null && !validPin(lat, lng))) {
+      return res.status(400).json({ success: false, field: 'lat', message: 'Send both lat and lng as real coordinates, or neither.' });
+    }
+
+    if (lat != null) {
+      const zone = await checkCustomerPin(lat as number, lng as number);
+      if (zone) return res.status(400).json({ success: false, code: zone.code, field: zone.field, message: zone.message });
+    }
+
+    const count = await prisma.address.count({ where: { userId: req.user!.id } });
+    if (count >= 10) {
+      return res.status(400).json({ success: false, message: 'You can save up to 10 addresses.' });
+    }
+
+    const newAddress = await prisma.$transaction(async (tx) => {
+      if (isDefault || count === 0) {
+        await tx.address.updateMany({
+          where: { userId: req.user!.id },
+          data: { isDefault: false }
+        });
+      }
+      return tx.address.create({
+        data: {
+          userId: req.user!.id,
+          label: cleanLabel,
+          address: cleanAddress,
+          isDefault: isDefault === true || count === 0,
+          lat: validPin(lat, lng) ? lat : null,
+          lng: validPin(lat, lng) ? lng : null,
+        }
+      });
+    });
+
+    return res.status(201).json({ success: true, data: newAddress });
+  } catch (err: any) {
+    return fail(res, err, 'Error creating address');
+  }
+});
+
+apiRouter.put('/auth/addresses/:id', requireAuth, requireRole('CLIENT'), validParams('id'), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { label, address, isDefault, lat, lng } = req.body ?? {};
+    const addressId = req.params.id;
+
+    const existing = await prisma.address.findFirst({
+      where: { id: addressId, userId: req.user!.id }
+    });
+    if (!existing) return res.status(404).json({ success: false, message: 'Address not found.' });
+    const cleanLabel = label !== undefined ? cleanAddressLabel(label) : undefined;
+    if (cleanLabel === null) return res.status(400).json({ success: false, field: 'label', message: 'The label is 2 to 50 characters, without special symbols.' });
+    const cleanAddress = address !== undefined ? normalizeDropPoint(address) : undefined;
+    if (cleanAddress === null) return res.status(400).json({ success: false, field: 'address', message: 'Enter an address (2 to 200 characters, no special symbols).' });
+    if (lat !== undefined || lng !== undefined) {
+      const both = lat === null && lng === null; // both null clears the pin
+      if (!both && !validPin(lat, lng)) return res.status(400).json({ success: false, field: 'lat', message: 'Send both lat and lng as real coordinates (or both null to remove the pin).' });
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      if (isDefault && !existing.isDefault) {
+        await tx.address.updateMany({
+          where: { userId: req.user!.id },
+          data: { isDefault: false }
+        });
+      }
+      return tx.address.update({
+        where: { id: addressId },
+        data: {
+          label: cleanLabel,
+          address: cleanAddress,
+          isDefault: isDefault !== undefined ? isDefault === true : undefined,
+          lat: lat !== undefined ? (validPin(lat, lng) ? lat : null) : undefined,
+          lng: lng !== undefined ? (validPin(lat, lng) ? lng : null) : undefined,
+        }
+      });
+    });
+
+    return res.json({ success: true, data: updated });
+  } catch (err: any) {
+    return fail(res, err, 'Error updating address');
+  }
+});
+
+apiRouter.delete('/auth/addresses/:id', requireAuth, requireRole('CLIENT'), validParams('id'), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const addressId = req.params.id;
+    const existing = await prisma.address.findFirst({
+      where: { id: addressId, userId: req.user!.id }
+    });
+    if (!existing) return res.status(404).json({ success: false, message: 'Address not found.' });
+
+    await prisma.address.delete({ where: { id: addressId } });
+
+    // If we deleted the default one, pick another one as default
+    if (existing.isDefault) {
+      const nextOne = await prisma.address.findFirst({
+        where: { userId: req.user!.id },
+        orderBy: { createdAt: 'desc' }
+      });
+      if (nextOne) {
+        await prisma.address.update({
+          where: { id: nextOne.id },
+          data: { isDefault: true }
+        });
+      }
+    }
+
+    return res.json({ success: true, message: 'Address deleted.' });
+  } catch (err: any) {
+    return fail(res, err, 'Error deleting address');
   }
 });
 
@@ -528,7 +790,7 @@ apiRouter.post('/admin/partners', requireAuth, requireRole('ADMIN'), async (req:
         if (!v.ok) return bad(v.error.field, v.error.message);
         vendorData = v.data;
         if (b.lat !== undefined || b.lng !== undefined) {
-          const check = checkVendorLocation(b.lat, b.lng);
+          const check = await checkVendorPin(b.lat, b.lng);
           if (!check.ok) return bad(check.field, check.message);
           pin = { lat: check.lat, lng: check.lng };
         }
@@ -660,7 +922,7 @@ apiRouter.post('/vendors', requireAuth, requireRole('ADMIN'), async (req: Authen
 
     let pin: { lat: number; lng: number } | null = null;
     if (lat !== undefined || lng !== undefined) {
-      const check = checkVendorLocation(lat, lng);
+      const check = await checkVendorPin(lat, lng);
       if (!check.ok) return res.status(400).json({ success: false, field: check.field, message: check.message });
       pin = { lat: check.lat, lng: check.lng };
     }
@@ -685,11 +947,11 @@ apiRouter.post('/vendors', requireAuth, requireRole('ADMIN'), async (req: Authen
   }
 });
 
-// ADMIN: set a restaurant's map pin (Docs/19). Numbers only, real ranges, within 3 km of the campus centre; audit-logged.
+// ADMIN: set a restaurant's map pin (Docs/19). Numbers only, real ranges, inside Senegal and inside a service area when the app is narrowed down; audit-logged.
 apiRouter.patch('/admin/vendors/:id/location', requireAuth, requireRole('ADMIN'), validParams('id'), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const body = req.body && typeof req.body === 'object' ? req.body : {};
-    const check = checkVendorLocation(body.lat, body.lng);
+    const check = await checkVendorPin(body.lat, body.lng);
     if (!check.ok) return res.status(400).json({ success: false, field: check.field, message: check.message });
     const existing = await prisma.vendor.findUnique({ where: { id: req.params.id }, select: { id: true, name: true, ...VENDOR_LOCATION_SELECT } });
     if (!existing) return res.status(404).json({ success: false, message: 'Vendor not found' });
@@ -871,7 +1133,7 @@ apiRouter.get('/analytics', requireAuth, requireRole('ADMIN'), async (req: Authe
         grossOrderVolume: paid.reduce((sum, order) => sum + order.totalAmount, 0),
         orderCount: orders.length,
         averageDeliveryMinutes: Math.round(averageDeliveryMinutes * 10) / 10,
-        activeStudents: new Set(orders.filter((order) => order.status !== 'CANCELLED').map((order) => order.customerId)).size,
+        activeClients: new Set(orders.filter((order) => order.status !== 'CANCELLED').map((order) => order.customerId)).size,
         cancellationRate: orders.length ? Math.round((orders.filter((order) => order.status === 'CANCELLED').length / orders.length) * 1000) / 10 : 0,
         hourlyOrders: Array.from({ length: 24 }, (_, hour) => ({ hour: `${hour.toString().padStart(2, '0')}:00`, orders: hourlyTotals.get(hour) || 0 })),
         hostelOrders: [...hostelTotals.entries()].sort((a, b) => b[1] - a[1]).map(([hostel, count]) => ({ hostel, orders: count })),
@@ -932,7 +1194,7 @@ const reviewText = (raw: unknown): string | null | false => {
 };
 const reviewBad = (res: Response, field: string, message: string) => res.status(400).json({ success: false, code: 'BAD_REQUEST', field, message });
 
-apiRouter.post('/reviews', requireAuth, requireRole('STUDENT'), async (req: AuthenticatedRequest, res: Response) => {
+apiRouter.post('/reviews', requireAuth, requireRole('CLIENT'), async (req: AuthenticatedRequest, res: Response) => {
   const b = req.body && typeof req.body === 'object' ? req.body : {};
   const { orderId, driverRating, driverTags, dishReviews } = b;
 
@@ -1079,7 +1341,7 @@ apiRouter.post('/reviews', requireAuth, requireRole('STUDENT'), async (req: Auth
       return res.status(400).json({ success: false, message: 'This order has already been reviewed.' });
     }
     if (err.message === 'FORBIDDEN') {
-      return res.status(403).json({ success: false, message: 'Only the student who placed a delivered order can review it.' });
+      return res.status(403).json({ success: false, message: 'Only the client who placed a delivered order can review it.' });
     }
     if (err.message === 'DISH_NOT_IN_ORDER') {
       return reviewBad(res, 'dishReviews', 'You can only rate dishes that were in this order.');
@@ -1091,7 +1353,7 @@ apiRouter.post('/reviews', requireAuth, requireRole('STUDENT'), async (req: Auth
 // Redeem 50 Kraveo Coins for the KRAVEO20 coupon (500 FCFA off, minimum order 2000 FCFA). The coins are taken here,
 // atomically, and the redemption is recorded on the account: KRAVEO20 only works at checkout while the customer
 // holds an unused redemption (see utils/validation.ts + services/orderFlow.ts), so the public code is worth nothing alone.
-apiRouter.post('/coupons/redeem-coins', requireAuth, requireRole('STUDENT'), async (req: AuthenticatedRequest, res: Response) => {
+apiRouter.post('/coupons/redeem-coins', requireAuth, requireRole('CLIENT'), async (req: AuthenticatedRequest, res: Response) => {
   try {
     if (!req.user?.id) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
@@ -1141,7 +1403,7 @@ const reviewPage = async (req: Request, res: Response, where: Record<string, unk
   });
   const hasMore = page.length > limit;
   const rows = hasMore ? page.slice(0, limit) : page;
-  const data = rows.map(({ customer, ...r }) => ({ ...r, reviewer: (customer?.name || 'Student').trim().split(/\s+/)[0] }));
+  const data = rows.map(({ customer, ...r }) => ({ ...r, reviewer: (customer?.name || 'Client').trim().split(/\s+/)[0] }));
   return res.json({ success: true, count: data.length, nextCursor: hasMore ? rows[rows.length - 1].id : null, data });
 };
 

@@ -3,6 +3,7 @@ import { SlidingWindow } from './middleware/rateLimit';
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { prisma } from './db';
 import { verifyTokenForAccount } from './middleware/auth';
+import { sessionIsOpen } from './services/adminTeam';
 import { orderView, isPoolEligible, OrderWithRelations, ORDER_VIEW_INCLUDE, ACTIVE_RIDER_STATUSES } from './services/orderView';
 
 /**
@@ -102,9 +103,13 @@ export const attachRealtime = (io: SocketIOServer) => {
       if (typeof rawToken !== 'string' || !rawToken.trim()) return next(new Error('Authentication required.'));
       // Signature + the account still exists + the token was not revoked (password reset, suspension, deletion).
       const decoded = await verifyTokenForAccount(rawToken.replace(/^Bearer\s+/i, ''));
+      // A back-office session that was closed from the sessions list cannot open a live connection either.
+      if (decoded.role === 'ADMIN' && !(await sessionIsOpen(decoded.sid, decoded.id))) return next(new Error('Invalid or expired authentication token.'));
       socket.data.user = { id: decoded.id, role: decoded.role } as SocketUser;
+      if (decoded.role === 'ADMIN' && decoded.sid) socket.data.sid = decoded.sid;
       const autoRooms = [`user_${decoded.id}`];
       if (decoded.role === 'ADMIN') autoRooms.push('admins');
+      if (decoded.role === 'ADMIN' && decoded.sid) autoRooms.push(`session_${decoded.sid}`);
       if (decoded.role === 'DRIVER' && (await isRiderOnDuty(decoded.id))) autoRooms.push('drivers');
       if (decoded.role === 'VENDOR') {
         const owned = await prisma.vendor.findMany({ where: { userId: decoded.id, approvalStatus: 'APPROVED' }, select: { id: true } });
@@ -166,6 +171,23 @@ export const attachRealtime = (io: SocketIOServer) => {
       }
     });
   });
+};
+
+/**
+ * Cuts the live connections of a closed back-office session (`sid`), or of every session of a person (`userId`, optionally keeping `exceptSid`).
+ * Never throws: a socket problem must not fail the request that closed the session.
+ */
+export const disconnectAdminSockets = async (opts: { sid?: string; userId?: string; exceptSid?: string }): Promise<void> => {
+  try {
+    const room = opts.sid ? `session_${opts.sid}` : opts.userId ? `user_${opts.userId}` : null;
+    if (!ioRef || !room) return;
+    for (const s of await ioRef.in(room).fetchSockets()) {
+      if (opts.exceptSid && s.data.sid === opts.exceptSid) continue;
+      s.disconnect(true);
+    }
+  } catch (err) {
+    console.error('disconnectAdminSockets failed:', errSummary(err));
+  }
 };
 
 /** Sockets of `userId` join `rooms` now (a rider going on duty). The caller has already checked they may. */
@@ -281,7 +303,7 @@ export const recordRiderLocation = async (riderUserId: string, lat: unknown, lng
         const sockets = await io.in(`order_${o.id}`).fetchSockets();
         for (const s of sockets) {
           const u = s.data.user as SocketUser | undefined;
-          if (u && (u.role === 'ADMIN' || (u.role === 'STUDENT' && u.id === o.customerId))) s.emit('rider_location', payload);
+          if (u && (u.role === 'ADMIN' || (u.role === 'CLIENT' && u.id === o.customerId))) s.emit('rider_location', payload);
         }
       }
     } catch (err) {

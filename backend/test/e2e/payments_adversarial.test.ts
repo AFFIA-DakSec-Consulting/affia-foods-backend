@@ -16,7 +16,7 @@ import crypto, { randomUUID } from 'crypto';
 import supertest from 'supertest';
 import { startTestServer, stopTestServer, TestServerInstance } from '../harness/app';
 import { prisma, seedTestDatabase, cleanTestOrders } from '../harness/db';
-import { getStudentToken, getVendorToken, getDriverToken, getAdminToken, getAuthHeader } from '../harness/auth';
+import { getClientToken, getVendorToken, getDriverToken, getAdminToken, getAuthHeader } from '../harness/auth';
 import { setPaymentProvider, createSimulatedProvider, PaymentProvider, PaymentProviderError, toProviderError } from '../../src/services/paymentService';
 import { runOrderMaintenance } from '../../src/services/orderMaintenance';
 import { __waitForBackgroundWork, executeRefund } from '../../src/services/refundService';
@@ -31,11 +31,11 @@ afterAll(() => restoreEconomics());
 
 jest.setTimeout(60_000);
 
-const STUDENT = { id: 'usr-1', phone: '+221 776543210' };
+const CLIENT = { id: 'usr-1', phone: '+221 776543210' };
 const VENDOR = { id: 'usr-3', phone: '+221 776543212' };
 const RIDER = { id: 'usr-4', phone: '+221 776543213' };
 const ADMIN = { id: 'usr-5', phone: '+221 776543214' };
-const tStudent = getStudentToken(STUDENT.id, STUDENT.phone);
+const tClient = getClientToken(CLIENT.id, CLIENT.phone);
 const tVendor = getVendorToken(VENDOR.id, VENDOR.phone);
 const tRider = getDriverToken(RIDER.id, RIDER.phone);
 const tAdmin = getAdminToken(ADMIN.id, ADMIN.phone);
@@ -142,12 +142,12 @@ describe('Payments adversarial audit', () => {
   const useProvider = (ctl: Ctl = {}) => { P = makeProvider(ctl); setPaymentProvider(P.provider); return P; };
 
   // ---------------- API helpers ----------------
-  const place = (token = tStudent, extra: Record<string, unknown> = {}) =>
+  const place = (token = tClient, extra: Record<string, unknown> = {}) =>
     request.post('/api/orders').set(H(token)).send({
       vendorId: 'ven-1', items: [{ itemId: 'item-1', quantity: 1 }], dropoffHostel: 'Cité Lamy', clientRequestId: randomUUID(), ...extra,
     });
-  const createPayment = (orderId: string, token = tStudent) => request.post('/api/payments/create-order').set(H(token)).send({ orderId });
-  const verify = (rzp: string, payId = `pay_${randomUUID().slice(0, 12)}`, token = tStudent, sig = 'sim') =>
+  const createPayment = (orderId: string, token = tClient) => request.post('/api/payments/create-order').set(H(token)).send({ orderId });
+  const verify = (rzp: string, payId = `pay_${randomUUID().slice(0, 12)}`, token = tClient, sig = 'sim') =>
     request.post('/api/payments/verify-signature').set(H(token)).send({ razorpayOrderId: rzp, razorpayPaymentId: payId, razorpaySignature: sig });
   const webhook = (body: unknown, signature = 'valid_test_wh_signature') =>
     request.post('/api/payments/webhook').set('x-razorpay-signature', signature).send(body as any);
@@ -157,7 +157,7 @@ describe('Payments adversarial audit', () => {
   const setStatus = (id: string, status: string, token: string, extra: object = {}) => request.patch(`/api/orders/${id}/status`).set(H(token)).send({ status, ...extra });
   const claim = (id: string, token = tRider) => request.post(`/api/orders/${id}/accept-driver`).set(H(token)).send({});
   const adminCancel = (id: string, reason = 'adversarial cancel') => request.post(`/api/admin/orders/${id}/cancel`).set(H(tAdmin)).send({ reason });
-  const customerCancel = (id: string) => request.post(`/api/orders/${id}/cancel`).set(H(tStudent)).send({});
+  const customerCancel = (id: string) => request.post(`/api/orders/${id}/cancel`).set(H(tClient)).send({});
   const vendorReject = (id: string) => request.post(`/api/orders/${id}/reject`).set(H(tVendor)).send({ reason: 'adversarial reject' });
   const retryRefund = (id: string) => request.post(`/api/admin/orders/${id}/retry-refund`).set(H(tAdmin)).send({});
   const needsAttention = async () => (await request.get('/api/admin/orders/needs-attention').set(H(tAdmin))).body.data as any[];
@@ -167,7 +167,7 @@ describe('Payments adversarial audit', () => {
     return pays.flatMap((p) => (p.razorpayPaymentId ? P.sim.refunds.get(p.razorpayPaymentId) ?? [] : []));
   };
 
-  const placePaid = async (token = tStudent) => {
+  const placePaid = async (token = tClient) => {
     const placed = await place(token);
     expect(placed.status).toBe(201);
     const pay = await createPayment(placed.body.data.id, token);
@@ -197,7 +197,7 @@ describe('Payments adversarial audit', () => {
     const payId = `pay_adv_${randomUUID().slice(0, 12)}`;
     const created = await prisma.order.create({
       data: {
-        customerId: STUDENT.id, vendorId: 'ven-1', driverId: o.driverId ?? null, totalAmount: total, subtotal: total - 25, deliveryFee: 25, taxAndPackaging: 0,
+        customerId: CLIENT.id, vendorId: 'ven-1', driverId: o.driverId ?? null, totalAmount: total, subtotal: total - 25, deliveryFee: 25, taxAndPackaging: 0,
         dropoffHostel: 'Randoulène', status: (o.status ?? 'PLACED') as any, paymentStatus: o.paid ? 'PAID' : 'PENDING',
         createdAt: minutesAgo(o.ageMin ?? 1),
         paidAt: o.paid ? minutesAgo(o.paidAgoMin ?? 1) : null,
@@ -230,7 +230,7 @@ describe('Payments adversarial audit', () => {
     await prisma.order.updateMany({ where: { status: 'PLACED', paymentStatus: { in: ['PENDING', 'FAILED'] } }, data: { status: 'CANCELLED', cancelledAt: new Date() } });
     await prisma.vendor.update({ where: { id: 'ven-1' }, data: { isAcceptingOrders: true, approvalStatus: 'APPROVED' } });
     await prisma.driverPartner.updateMany({ where: { userId: RIDER.id }, data: { dutyStatus: 'ONLINE', approvalStatus: 'APPROVED' } });
-    await prisma.user.update({ where: { id: STUDENT.id }, data: { kraveoCoins: 30 } });
+    await prisma.user.update({ where: { id: CLIENT.id }, data: { kraveoCoins: 30 } });
   });
 
   afterEach(async () => {
@@ -608,10 +608,10 @@ describe('Payments adversarial audit', () => {
     });
 
     test('PROVE: end to end 33.33 x 7 with VITFIRST: stored total, Razorpay order amount, captured amount and refund amount are all the same integer paise (21165)', async () => {
-      // VITFIRST is for a first order only: use a brand-new customer (the shared student has many earlier orders).
+      // VITFIRST is for a first order only: use a brand-new customer (the shared client has many earlier orders).
       const vit = { id: 'usr-adv-vit', phone: '+221 779800777' };
-      await prisma.user.upsert({ where: { id: vit.id }, update: {}, create: { id: vit.id, name: 'Vit First', phone: vit.phone, role: 'STUDENT', hostelBlock: 'Randoulène' } });
-      const tVit = getStudentToken(vit.id, vit.phone);
+      await prisma.user.upsert({ where: { id: vit.id }, update: {}, create: { id: vit.id, name: 'Vit First', phone: vit.phone, role: 'CLIENT', hostelBlock: 'Randoulène' } });
+      const tVit = getClientToken(vit.id, vit.phone);
       const placed = await place(tVit, { items: [{ itemId: 'adv-p-7', quantity: 7 }], couponCode: 'VITFIRST' });
       expect(placed.status).toBe(201);
       expect(placed.body.data.totalAmount).toBe(211.65); // 233.31 + 25 - 46.66
@@ -641,17 +641,17 @@ describe('Payments adversarial audit', () => {
     });
 
     test('PROVE: the client cannot influence totals: extra price/total/discount fields ignored; fractional, string, negative, zero, huge, NaN quantities and 31 lines are refused', async () => {
-      const ok = await place(tStudent, { totalAmount: 1, price: 1, discount: 999, deliveryFee: 0, items: [{ itemId: 'item-1', quantity: 1, price: 0.01 }] });
+      const ok = await place(tClient, { totalAmount: 1, price: 1, discount: 999, deliveryFee: 0, items: [{ itemId: 'item-1', quantity: 1, price: 0.01 }] });
       expect(ok.status).toBe(201);
       expect(ok.body.data.totalAmount).toBe(205);
       await prisma.order.updateMany({ where: { status: 'PLACED', paymentStatus: 'PENDING' }, data: { status: 'CANCELLED' } });
       for (const q of [1.5, '2', -1, 0, 21, 1e9, null, Number.MAX_SAFE_INTEGER]) {
-        const r = await place(tStudent, { items: [{ itemId: 'item-1', quantity: q }] });
+        const r = await place(tClient, { items: [{ itemId: 'item-1', quantity: q }] });
         expect(r.status).toBe(400);
       }
-      const many = await place(tStudent, { items: Array.from({ length: 31 }, () => ({ itemId: 'item-1', quantity: 1 })) });
+      const many = await place(tClient, { items: Array.from({ length: 31 }, () => ({ itemId: 'item-1', quantity: 1 })) });
       expect(many.status).toBe(400);
-      expect((await place(tStudent, { items: [{ itemId: 'item-1', quantity: 1 }], couponCode: 'X'.repeat(31) })).status).toBe(400);
+      expect((await place(tClient, { items: [{ itemId: 'item-1', quantity: 1 }], couponCode: 'X'.repeat(31) })).status).toBe(400);
     });
 
     test('PROVE: a menu price change after the order was placed does not change what is charged or refunded', async () => {
@@ -670,48 +670,48 @@ describe('Payments adversarial audit', () => {
     });
 
     test('PROVE: KRAVEO20 ("redeem 50 coins") is refused (400 COUPON_NOT_APPLICABLE) without a redemption, consumes nothing, and KRAVEO50 / VITFIRST are single use', async () => {
-      await prisma.user.update({ where: { id: STUDENT.id }, data: { kraveoCoins: 0, kraveo20Redeemed: 0 } });
-      const r = await place(tStudent, { couponCode: 'KRAVEO20' });
+      await prisma.user.update({ where: { id: CLIENT.id }, data: { kraveoCoins: 0, kraveo20Redeemed: 0 } });
+      const r = await place(tClient, { couponCode: 'KRAVEO20' });
       expect([r.status, r.body.code]).toEqual([400, 'COUPON_NOT_APPLICABLE']);
-      expect((await prisma.user.findUniqueOrThrow({ where: { id: STUDENT.id } })).kraveoCoins).toBe(0);
+      expect((await prisma.user.findUniqueOrThrow({ where: { id: CLIENT.id } })).kraveoCoins).toBe(0);
       // Not enough coins to redeem either: the public code stays worthless.
-      expect((await request.post('/api/coupons/redeem-coins').set(H(tStudent)).send({})).status).toBe(400);
-      expect((await place(tStudent, { couponCode: 'KRAVEO20' })).status).toBe(400);
+      expect((await request.post('/api/coupons/redeem-coins').set(H(tClient)).send({})).status).toBe(400);
+      expect((await place(tClient, { couponCode: 'KRAVEO20' })).status).toBe(400);
       // Redeem once (50 coins, atomically) -> exactly one use of the code.
-      await prisma.user.update({ where: { id: STUDENT.id }, data: { kraveoCoins: 120 } });
-      const red = await request.post('/api/coupons/redeem-coins').set(H(tStudent)).send({});
+      await prisma.user.update({ where: { id: CLIENT.id }, data: { kraveoCoins: 120 } });
+      const red = await request.post('/api/coupons/redeem-coins').set(H(tClient)).send({});
       expect([red.status, red.body.remainingCoins]).toEqual([200, 70]);
-      const first = await place(tStudent, { couponCode: ' kraveo20 ' });
+      const first = await place(tClient, { couponCode: ' kraveo20 ' });
       expect([first.status, first.body.data.discount, first.body.data.totalAmount]).toEqual([201, 20, 185]);
       expect((await db(first.body.data.id)).couponCode).toBe('KRAVEO20');
       // (Bug hunt BE1-01: an abandoned unpaid checkout is replaced by the next one; an order whose payment was just opened is "live" and keeps its code.)
       expect((await createPayment(first.body.data.id)).status).toBe(200);
-      const second = await place(tStudent, { couponCode: 'KRAVEO20' });
+      const second = await place(tClient, { couponCode: 'KRAVEO20' });
       expect([second.status, second.body.code]).toEqual([400, 'COUPON_NOT_APPLICABLE']);
       // Cancelling the order releases the redemption again.
       expect((await customerCancel(first.body.data.id)).status).toBe(200);
-      const third = await place(tStudent, { couponCode: 'KRAVEO20' });
+      const third = await place(tClient, { couponCode: 'KRAVEO20' });
       expect([third.status, third.body.data.discount]).toEqual([201, 20]);
-      expect((await prisma.user.findUniqueOrThrow({ where: { id: STUDENT.id } })).kraveoCoins).toBe(70); // coins were taken once, at redemption
+      expect((await prisma.user.findUniqueOrThrow({ where: { id: CLIENT.id } })).kraveoCoins).toBe(70); // coins were taken once, at redemption
       // KRAVEO50: once per customer; below the minimum cart and unknown codes are refused (not silently ignored).
-      const k50 = await place(tStudent, { couponCode: 'KRAVEO50' });
+      const k50 = await place(tClient, { couponCode: 'KRAVEO50' });
       expect([k50.status, k50.body.data.discount]).toEqual([201, 50]);
       expect((await createPayment(k50.body.data.id)).status).toBe(200);
-      const k50b = await place(tStudent, { couponCode: 'KRAVEO50' });
+      const k50b = await place(tClient, { couponCode: 'KRAVEO50' });
       expect([k50b.status, k50b.body.code]).toEqual([400, 'COUPON_NOT_APPLICABLE']);
-      const small = await place(tStudent, { couponCode: 'KRAVEO50', items: [{ itemId: 'item-2', quantity: 1 }] });
+      const small = await place(tClient, { couponCode: 'KRAVEO50', items: [{ itemId: 'item-2', quantity: 1 }] });
       expect([small.status, small.body.code]).toEqual([400, 'COUPON_NOT_APPLICABLE']);
       expect(small.body.message).toMatch(/at least/);
-      const unknown = await place(tStudent, { couponCode: 'FREEFOOD' });
+      const unknown = await place(tClient, { couponCode: 'FREEFOOD' });
       expect([unknown.status, unknown.body.code]).toEqual([400, 'COUPON_NOT_APPLICABLE']);
     });
 
     test('PROVE: VITFIRST is only for a first order and single use: later orders, a second use and 6 concurrent checkouts get no discount (400); cancelling releases it', async () => {
       const mk = async (n: number) => {
         const u = { id: `usr-adv-vit${n}`, phone: `+221 7798008${String(n).padStart(2, "0")}` };
-        await prisma.user.upsert({ where: { id: u.id }, update: { }, create: { id: u.id, name: `Vit Tester${n}`, phone: u.phone, role: 'STUDENT', hostelBlock: 'Randoulène' } });
+        await prisma.user.upsert({ where: { id: u.id }, update: { }, create: { id: u.id, name: `Vit Tester${n}`, phone: u.phone, role: 'CLIENT', hostelBlock: 'Randoulène' } });
         await prisma.order.deleteMany({ where: { customerId: u.id } });
-        return getStudentToken(u.id, u.phone);
+        return getClientToken(u.id, u.phone);
       };
       // a) first order gets it, the second use is refused, cancelling the first releases it
       const t1 = await mk(1);
@@ -829,19 +829,19 @@ describe('Payments adversarial audit', () => {
       await prisma.payment.update({ where: { razorpayOrderId: dear.rzp }, data: { razorpayOrderId: 'order_real_dear1', status: 'PENDING', razorpayPaymentId: null, capturedAmountPaise: null } });
       await prisma.order.updateMany({ where: { id: { in: [cheap.id, dear.id] } }, data: { paymentStatus: 'PENDING', paidAt: null } });
       const sigCheap = hmac(keySecret, 'order_real_cheap1|pay_cheap');
-      expect((await verify('order_real_dear1', 'pay_cheap', tStudent, sigCheap)).status).toBe(400); // wrong order id for that signature
-      expect((await verify('order_real_dear1', 'pay_dear', tStudent, sigCheap)).status).toBe(400);
+      expect((await verify('order_real_dear1', 'pay_cheap', tClient, sigCheap)).status).toBe(400); // wrong order id for that signature
+      expect((await verify('order_real_dear1', 'pay_dear', tClient, sigCheap)).status).toBe(400);
       expect((await db(dear.id)).paymentStatus).toBe('PENDING');
       expect((await webhook(captured('order_real_cheap1', 10000, 'pay_cheap', { notes: { orderId: dear.id } }))).body.code).toBe('ORDER_MISMATCH'); // notes name the dear order
       expect((await db(dear.id)).paymentStatus).toBe('PENDING');
-      await prisma.user.upsert({ where: { id: 'usr-of-other-stu' }, update: {}, create: { id: 'usr-of-other-stu', name: 'Other Student', phone: '+221 779800001', role: 'STUDENT' } });
-      const other = getStudentToken('usr-of-other-stu', '+221 779800001');
+      await prisma.user.upsert({ where: { id: 'usr-of-other-stu' }, update: {}, create: { id: 'usr-of-other-stu', name: 'Other Client', phone: '+221 779800001', role: 'CLIENT' } });
+      const other = getClientToken('usr-of-other-stu', '+221 779800001');
       expect((await verify('order_real_cheap1', 'pay_cheap', other, sigCheap)).status).toBe(404); // not the owner of that payment order
-      expect((await verify('order_real_cheap1', 'pay_cheap', tStudent, sigCheap)).status).toBe(200);
+      expect((await verify('order_real_cheap1', 'pay_cheap', tClient, sigCheap)).status).toBe(200);
       expect((await db(cheap.id)).paymentStatus).toBe('PAID');
       expect((await db(dear.id)).paymentStatus).toBe('PENDING');
       // a signature for a payment id the attacker chooses is useless without the key
-      expect((await verify('order_real_dear1', 'pay_x', tStudent, hmac('guess', 'order_real_dear1|pay_x'))).status).toBe(400);
+      expect((await verify('order_real_dear1', 'pay_x', tClient, hmac('guess', 'order_real_dear1|pay_x'))).status).toBe(400);
     });
 
     test('PROVE: webhooks for unknown, foreign or nonexistent orders change nothing and never 500; a signed foreign-customer payment cannot be claimed via verify', async () => {
@@ -930,8 +930,8 @@ describe('Payments adversarial audit', () => {
     test('PROVE: DELIVERED is unreachable without the gate OTP for every role and for the job / webhook / reassign / retry-refund', async () => {
       const o = await driveTo('ARRIVED_AT_GATE');
       const vendorTry = await setStatus(o.id, 'DELIVERED', tVendor);
-      const studentTry = await setStatus(o.id, 'DELIVERED', tStudent);
-      expect([vendorTry.status, studentTry.status]).toEqual([403, 403]);
+      const clientTry = await setStatus(o.id, 'DELIVERED', tClient);
+      expect([vendorTry.status, clientTry.status]).toEqual([403, 403]);
       expect((await setStatus(o.id, 'DELIVERED', tRider)).status).toBe(400); // no OTP
       expect((await setStatus(o.id, 'DELIVERED', tAdmin)).status).toBe(400);
       expect((await request.post(`/api/orders/${o.id}/verify-gate-otp`).set(H(tRider)).send({})).status).toBe(400);
@@ -995,7 +995,7 @@ describe('Payments adversarial audit', () => {
 
     test('PROVE: a tick handles at most 100 expired orders; a backlog of 130 drains over consecutive ticks without skipping or double-processing', async () => {
       await prisma.order.updateMany({ where: { status: 'PLACED' }, data: { status: 'CANCELLED' } });
-      await prisma.order.createMany({ data: Array.from({ length: 130 }, () => ({ customerId: STUDENT.id, vendorId: 'ven-1', totalAmount: 220, subtotal: 180, deliveryFee: 25, taxAndPackaging: 15, dropoffHostel: 'Randoulène', createdAt: minutesAgo(40) })) });
+      await prisma.order.createMany({ data: Array.from({ length: 130 }, () => ({ customerId: CLIENT.id, vendorId: 'ven-1', totalAmount: 220, subtotal: 180, deliveryFee: 25, taxAndPackaging: 15, dropoffHostel: 'Randoulène', createdAt: minutesAgo(40) })) });
       const first = await runOrderMaintenance();
       expect(first.expired).toHaveLength(100);
       const second = await runOrderMaintenance();
@@ -1508,7 +1508,7 @@ describe('Payments adversarial audit', () => {
       expect(wide.body.data.map((x: any) => x.paymentId)).toContain('pay_three_days');
       expect(wide.body.data.map((x: any) => x.paymentId)).not.toContain('pay_ten_days');
       // admin only
-      expect((await orphans('', tStudent)).status).toBe(403);
+      expect((await orphans('', tClient)).status).toBe(403);
       expect((await orphans('', tVendor)).status).toBe(403);
       expect((await request.get('/api/admin/payments/reconcile')).status).toBe(401);
     });

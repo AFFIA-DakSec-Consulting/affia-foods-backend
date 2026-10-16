@@ -13,7 +13,7 @@ import { Socket } from 'socket.io-client';
 import { Role } from '@prisma/client';
 import { startTestServer, stopTestServer, TestServerInstance } from '../harness/app';
 import { prisma, seedTestDatabase, cleanTestOrders, cleanTestUsers } from '../harness/db';
-import { getStudentToken, getVendorToken, getDriverToken, getAdminToken, getAuthHeader } from '../harness/auth';
+import { getClientToken, getVendorToken, getDriverToken, getAdminToken, getAuthHeader } from '../harness/auth';
 import { connectTestSocket, disconnectTestSocket } from '../harness/socket';
 import { setPaymentProvider, createSimulatedProvider, PaymentProvider } from '../../src/services/paymentService';
 import { runOrderMaintenance } from '../../src/services/orderMaintenance';
@@ -27,16 +27,16 @@ afterAll(() => restoreEconomics());
 
 jest.setTimeout(30_000);
 
-const STUDENT = { id: 'usr-1', phone: '+221 776543210' };
-const STUDENT2 = { id: 'usr-of-stu2', phone: '+221 779811111' };
+const CLIENT = { id: 'usr-1', phone: '+221 776543210' };
+const CLIENT2 = { id: 'usr-of-stu2', phone: '+221 779811111' };
 const VENDOR = { id: 'usr-3', phone: '+221 776543212' };
 const VENDOR2 = { id: 'usr-of-ven2', phone: '+221 779833333' };
 const RIDER = { id: 'usr-4', phone: '+221 776543213' };
 const RIDER2 = { id: 'usr-of-rid2', phone: '+221 779822222' };
 const ADMIN = { id: 'usr-5', phone: '+221 776543214' };
 
-const tStudent = getStudentToken(STUDENT.id, STUDENT.phone);
-const tStudent2 = getStudentToken(STUDENT2.id, STUDENT2.phone);
+const tClient = getClientToken(CLIENT.id, CLIENT.phone);
+const tClient2 = getClientToken(CLIENT2.id, CLIENT2.phone);
 const tVendor = getVendorToken(VENDOR.id, VENDOR.phone);
 const tVendor2 = getVendorToken(VENDOR2.id, VENDOR2.phone);
 const tRider = getDriverToken(RIDER.id, RIDER.phone);
@@ -84,12 +84,12 @@ describe('Order flow v1', () => {
   const join = async (s: Socket, room: string) => (await s.emitWithAck('join_room', room)).ok as boolean;
 
   // ---------------- API helpers ----------------
-  const place = (token = tStudent, extra: Record<string, unknown> = {}) =>
+  const place = (token = tClient, extra: Record<string, unknown> = {}) =>
     request.post('/api/orders').set(H(token)).send({
       vendorId: 'ven-1', items: [{ itemId: 'item-1', quantity: 1 }], dropoffHostel: 'Cité Lamy', dropoffNotes: 'Room 214, call 98xxxxxx', clientRequestId: randomUUID(), ...extra,
     });
-  const createPayment = (orderId: string, token = tStudent) => request.post('/api/payments/create-order').set(H(token)).send({ orderId });
-  const verify = (rzpOrderId: string, paymentId = `pay_${randomUUID().slice(0, 12)}`, token = tStudent) =>
+  const createPayment = (orderId: string, token = tClient) => request.post('/api/payments/create-order').set(H(token)).send({ orderId });
+  const verify = (rzpOrderId: string, paymentId = `pay_${randomUUID().slice(0, 12)}`, token = tClient) =>
     request.post('/api/payments/verify-signature').set(H(token)).send({ razorpayOrderId: rzpOrderId, razorpayPaymentId: paymentId, razorpaySignature: 'sim' });
   const webhook = (body: unknown, signature = 'valid_test_wh_signature') =>
     request.post('/api/payments/webhook').set('x-razorpay-signature', signature).send(body as any);
@@ -107,7 +107,7 @@ describe('Order flow v1', () => {
   };
 
   /** Place + pay through the real endpoints. Returns ids. */
-  const placePaid = async (token = tStudent) => {
+  const placePaid = async (token = tClient) => {
     const placed = await place(token);
     expect(placed.status).toBe(201);
     const pay = await createPayment(placed.body.data.id, token);
@@ -139,7 +139,7 @@ describe('Order flow v1', () => {
     const paymentId = `pay_fx_${randomUUID().slice(0, 12)}`;
     const order = await prisma.order.create({
       data: {
-        customerId: opts.customerId ?? STUDENT.id, vendorId: 'ven-1', driverId: opts.driverId ?? null, totalAmount: 220, subtotal: 180, deliveryFee: 25, taxAndPackaging: 15,
+        customerId: opts.customerId ?? CLIENT.id, vendorId: 'ven-1', driverId: opts.driverId ?? null, totalAmount: 220, subtotal: 180, deliveryFee: 25, taxAndPackaging: 15,
         dropoffHostel: 'Randoulène', status: status as any, paymentStatus: 'PAID', paidAt: new Date(Date.now() - (opts.paidAgoMin ?? 1) * 60_000),
         otpCode: status === 'ARRIVED_AT_GATE' ? '4821' : null,
         payments: { create: [{ razorpayOrderId: `order_fx_${randomUUID().slice(0, 12)}`, razorpayPaymentId: paymentId, amount: 220, capturedAmountPaise: 22000, status: 'PAID' }] },
@@ -156,7 +156,7 @@ describe('Order flow v1', () => {
     await seedTestDatabase();
     await prisma.adminAuditLog.deleteMany({});
     for (const u of [
-      { id: STUDENT2.id, name: 'Priya Nair', phone: STUDENT2.phone, role: Role.STUDENT, hostelBlock: 'Girls Gate 1' },
+      { id: CLIENT2.id, name: 'Priya Nair', phone: CLIENT2.phone, role: Role.CLIENT, hostelBlock: 'Girls Gate 1' },
       { id: RIDER2.id, name: 'Arjun Rider', phone: RIDER2.phone, role: Role.DRIVER },
       { id: VENDOR2.id, name: 'Other Owner', phone: VENDOR2.phone, role: Role.VENDOR },
     ]) await prisma.user.upsert({ where: { id: u.id }, update: u, create: u });
@@ -170,7 +170,7 @@ describe('Order flow v1', () => {
       update: { userId: VENDOR2.id, approvalStatus: 'APPROVED' },
       create: { id: 'ven-of-2', userId: VENDOR2.id, name: 'Other Kitchen', category: 'Rolls', address: 'Gate 2', bannerImage: '' },
     });
-    await prisma.user.update({ where: { id: STUDENT.id }, data: { name: 'Rahul Sharma', phone: STUDENT.phone, hostelBlock: 'Randoulène' } });
+    await prisma.user.update({ where: { id: CLIENT.id }, data: { name: 'Rahul Sharma', phone: CLIENT.phone, hostelBlock: 'Randoulène' } });
     server = await startTestServer(0);
     request = supertest(server.app);
   });
@@ -219,7 +219,7 @@ describe('Order flow v1', () => {
   // =========================================================================
   describe('lifecycle and visibility', () => {
     test('a full order: views per role over REST and over real sockets follow the visibility table', async () => {
-      const cust = await connect(tStudent);
+      const cust = await connect(tClient);
       const ven = await connect(tVendor);
       const rid = await connect(tRider);
       const rid2 = await connect(tRider2);
@@ -237,7 +237,7 @@ describe('Order flow v1', () => {
       const v0 = placed.body.data;
       capture('customer_view_PLACED_unpaid', v0);
       expect(v0).toMatchObject({ status: 'PLACED', paymentStatus: 'PENDING', subtotal: 180, deliveryFee: 25, taxAndPackaging: 0, discount: 0, totalAmount: 205, otpCode: null, driver: null });
-      expect(v0.customer).toEqual({ id: STUDENT.id, name: 'Rahul Sharma', phone: STUDENT.phone, hostelBlock: 'Randoulène' });
+      expect(v0.customer).toEqual({ id: CLIENT.id, name: 'Rahul Sharma', phone: CLIENT.phone, hostelBlock: 'Randoulène' });
       expect(Date.parse(v0.payBy) - Date.parse(v0.createdAt)).toBe(15 * 60_000);
       expect(await join(cust, `order_${id}`)).toBe(true);
       expect(await join(ven, `order_${id}`)).toBe(false); // unpaid: the restaurant may not watch it
@@ -256,7 +256,7 @@ describe('Order flow v1', () => {
       const alert = venLog.new_order_alert[0];
       capture('socket_new_order_alert_vendor', alert);
       expect(alert).toMatchObject({ id, paymentStatus: 'PAID', status: 'PLACED' });
-      expect(alert.customer).toEqual({ id: STUDENT.id, name: 'Rahul', phone: null, hostelBlock: null });
+      expect(alert.customer).toEqual({ id: CLIENT.id, name: 'Rahul', phone: null, hostelBlock: null });
       expect(alert.otpCode).toBeNull();
       expect(alert.acceptBy).toBeTruthy();
       expect(custLog.new_order_alert).toHaveLength(0);
@@ -287,7 +287,7 @@ describe('Order flow v1', () => {
       expect(claimed.status).toBe(200);
       capture('rider_assigned_view_after_claim', claimed.body.data);
       expect(claimed.body.data.status).toBe('ACCEPTED'); // claiming never changes the status
-      expect(claimed.body.data.customer).toEqual({ id: STUDENT.id, name: 'Rahul Sharma', phone: STUDENT.phone, hostelBlock: 'Randoulène' });
+      expect(claimed.body.data.customer).toEqual({ id: CLIENT.id, name: 'Rahul Sharma', phone: CLIENT.phone, hostelBlock: 'Randoulène' });
       expect(claimed.body.data.driver).toMatchObject({ id: RIDER.id, phone: RIDER.phone });
       await until(() => rid2Log.order_unavailable.some((e) => e.id === id));
       capture('socket_order_unavailable', rid2Log.order_unavailable.find((e) => e.id === id));
@@ -298,7 +298,7 @@ describe('Order flow v1', () => {
 
       for (const st of ['PREPARING', 'READY_FOR_PICKUP']) expect((await setStatus(id, st, tVendor)).status).toBe(200);
       expect((await setStatus(id, 'PICKED_UP', tRider)).status).toBe(200);
-      const custAfterPickup = (await getOrder(id, tStudent)).body.data;
+      const custAfterPickup = (await getOrder(id, tClient)).body.data;
       expect(custAfterPickup.driver).toEqual({ id: RIDER.id, name: 'Vikram Singh (Runner)', phone: RIDER.phone });
       expect(custAfterPickup.pickedUpAt).toBeTruthy();
 
@@ -327,7 +327,7 @@ describe('Order flow v1', () => {
       expect(ridLog.order_updated.at(-1).otpCode).toBeNull();
       expect(venLog.order_updated.at(-1).otpCode).toBeNull();
       expect(admLog.order_updated.at(-1).otpCode).toBe(otp);
-      const custView = (await getOrder(id, tStudent)).body.data;
+      const custView = (await getOrder(id, tClient)).body.data;
       capture('customer_view_ARRIVED_AT_GATE', custView);
       expect(custView.otpCode).toBe(otp);
       expect((await getOrder(id, tRider)).body.data.otpCode).toBeNull();
@@ -337,7 +337,7 @@ describe('Order flow v1', () => {
       capture('admin_view', adminView);
       expect(adminView.otpCode).toBe(otp);
       expect(adminView.payments[0]).toMatchObject({ razorpayOrderId: pay.body.razorpayOrderId, status: 'PAID', capturedAmountPaise: 20500 });
-      for (const t of [tStudent, tVendor, tRider]) expect(JSON.stringify((await getOrder(id, t)).body)).not.toMatch(/razorpay|"payments"/);
+      for (const t of [tClient, tVendor, tRider]) expect(JSON.stringify((await getOrder(id, t)).body)).not.toMatch(/razorpay|"payments"/);
 
       // 7. Delivered with the code the customer reads out.
       const delivered = await request.post(`/api/orders/${id}/verify-gate-otp`).set(H(tRider)).send({ otpCode: otp });
@@ -482,17 +482,17 @@ describe('Order flow v1', () => {
     test("verify-signature for another customer's order: 404 and the order is untouched", async () => {
       const a = await place();
       const pay = await createPayment(a.body.data.id);
-      const res = await verify(pay.body.razorpayOrderId, 'pay_other', tStudent2);
+      const res = await verify(pay.body.razorpayOrderId, 'pay_other', tClient2);
       expect(res.status).toBe(404);
       expect((await db(a.body.data.id)).paymentStatus).toBe('PENDING');
-      expect((await createPayment(a.body.data.id, tStudent2)).status).toBe(404);
+      expect((await createPayment(a.body.data.id, tClient2)).status).toBe(404);
     });
 
     test('forged signatures are refused (verify 400, webhook 400)', async () => {
       const a = await place();
       const rzp = `order_real_${randomUUID().slice(0, 8)}`; // not a simulator id, so the HMAC is really checked
       await prisma.payment.create({ data: { orderId: a.body.data.id, razorpayOrderId: rzp, amount: 220 } });
-      const v = await request.post('/api/payments/verify-signature').set(H(tStudent)).send({ razorpayOrderId: rzp, razorpayPaymentId: 'pay_x', razorpaySignature: 'f'.repeat(64) });
+      const v = await request.post('/api/payments/verify-signature').set(H(tClient)).send({ razorpayOrderId: rzp, razorpayPaymentId: 'pay_x', razorpaySignature: 'f'.repeat(64) });
       expect(v.status).toBe(400);
       const w = await webhook(captured(rzp, 22000), 'deadbeef'.repeat(8));
       expect(w.status).toBe(400);
@@ -526,7 +526,7 @@ describe('Order flow v1', () => {
       const placed = await place();
       const id = placed.body.data.id;
       const pay = await createPayment(id);
-      const cancelled = await request.post(`/api/orders/${id}/cancel`).set(H(tStudent)).send({ reason: 'Changed my mind' });
+      const cancelled = await request.post(`/api/orders/${id}/cancel`).set(H(tClient)).send({ reason: 'Changed my mind' });
       expect(cancelled.status).toBe(200);
       expect(cancelled.body.data).toMatchObject({ status: 'CANCELLED', cancelledBy: 'CUSTOMER', paymentStatus: 'PENDING' });
 
@@ -538,7 +538,7 @@ describe('Order flow v1', () => {
       expect(o.payments[0]).toMatchObject({ status: 'REFUNDED', razorpayPaymentId: 'pay_late_1' });
       expect(o.payments[0].razorpayRefundId).toMatch(/^rfnd_sim_/);
       expect(await refundsOf(id)).toHaveLength(1);
-      const view = (await getOrder(id, tStudent)).body.data;
+      const view = (await getOrder(id, tClient)).body.data;
       capture('customer_view_CANCELLED_REFUNDED', view);
       expect(view).toMatchObject({ status: 'CANCELLED', paymentStatus: 'REFUNDED', refundStatus: 'DONE', cancelReason: 'Changed my mind' });
       await sleep(150);
@@ -572,7 +572,7 @@ describe('Order flow v1', () => {
   describe('FM4 checkout robustness', () => {
     test('the same clientRequestId 5 times at once creates exactly one order', async () => {
       const key = randomUUID();
-      const res = await Promise.all(Array.from({ length: 5 }, () => place(tStudent, { clientRequestId: key })));
+      const res = await Promise.all(Array.from({ length: 5 }, () => place(tClient, { clientRequestId: key })));
       const ids = new Set(res.map((r) => r.body.data.id));
       expect(ids.size).toBe(1);
       expect(res.filter((r) => r.status === 201)).toHaveLength(1);
@@ -582,8 +582,8 @@ describe('Order flow v1', () => {
 
     test('retry after a lost response returns the same order; max 3 unpaid open orders', async () => {
       const key = randomUUID();
-      const first = await place(tStudent, { clientRequestId: key });
-      const retry = await place(tStudent, { clientRequestId: key });
+      const first = await place(tClient, { clientRequestId: key });
+      const retry = await place(tClient, { clientRequestId: key });
       expect(retry.status).toBe(200);
       expect(retry.body.data.id).toBe(first.body.data.id);
       // Bug hunt BE1-01: an abandoned checkout (no payment on its way) is replaced by the next one, so the cap of 3 is
@@ -598,7 +598,7 @@ describe('Order flow v1', () => {
       expect(fourth.status).toBe(429);
       expect(fourth.body.code).toBe('TOO_MANY_UNPAID_ORDERS');
       // A different customer is not affected.
-      expect((await place(tStudent2)).status).toBe(201);
+      expect((await place(tClient2)).status).toBe(201);
     });
 
     test('double tap on Pay: one Razorpay order, one payment row', async () => {
@@ -614,22 +614,22 @@ describe('Order flow v1', () => {
       const placed = await place();
       const pay = await createPayment(placed.body.data.id);
       await webhook(captured(pay.body.razorpayOrderId, 20500));
-      const list = await request.get('/api/orders?scope=active').set(H(tStudent));
+      const list = await request.get('/api/orders?scope=active').set(H(tClient));
       expect(list.body.data.find((o: any) => o.id === placed.body.data.id)).toMatchObject({ paymentStatus: 'PAID', status: 'PLACED' });
       expect((await createPayment(placed.body.data.id)).body.code).toBe('ALREADY_PAID');
     });
 
     test('the server ignores client prices, statuses and ids; unknown drop points are refused', async () => {
-      const r = await place(tStudent, { totalAmount: 1, status: 'DELIVERED', paymentStatus: 'PAID', id: 'evil-id', customerId: STUDENT2.id });
+      const r = await place(tClient, { totalAmount: 1, status: 'DELIVERED', paymentStatus: 'PAID', id: 'evil-id', customerId: CLIENT2.id });
       expect(r.status).toBe(201);
       expect(r.body.data).toMatchObject({ totalAmount: 205, status: 'PLACED', paymentStatus: 'PENDING' });
       expect(r.body.data.id).not.toBe('evil-id');
-      expect(r.body.data.customer.id).toBe(STUDENT.id);
-      expect((await place(tStudent, { dropoffHostel: 'Mars' })).body.field).toBe('dropoffHostel');
-      expect((await place(tStudent, { dropoffHostel: 'Randoulène' })).status).toBe(201); // legacy name still accepted
-      expect((await place(tStudent, { items: [{ itemId: 'item-1', quantity: 1.5 }] })).status).toBe(400);
-      expect((await place(tStudent, { items: [null] })).status).toBe(400);
-      expect((await place(tStudent, { clientRequestId: 'short' })).body.field).toBe('clientRequestId');
+      expect(r.body.data.customer.id).toBe(CLIENT.id);
+      expect((await place(tClient, { dropoffHostel: '<b>Mars</b>' })).body.field).toBe('dropoffHostel');
+      expect((await place(tClient, { dropoffHostel: 'Randoulène' })).status).toBe(201); // legacy name still accepted
+      expect((await place(tClient, { items: [{ itemId: 'item-1', quantity: 1.5 }] })).status).toBe(400);
+      expect((await place(tClient, { items: [null] })).status).toBe(400);
+      expect((await place(tClient, { clientRequestId: 'short' })).body.field).toBe('clientRequestId');
     });
   });
 
@@ -656,7 +656,7 @@ describe('Order flow v1', () => {
       const again = await request.post(`/api/orders/${o.id}/reject`).set(H(tVendor)).send({ reason: 'Out of paneer today' });
       expect(again.status).toBe(200);
       expect(await refundsOf(o.id)).toHaveLength(1);
-      expect((await getOrder(o.id, tStudent)).body.data.cancelReason).toBe('Out of paneer today');
+      expect((await getOrder(o.id, tClient)).body.data.cancelReason).toBe('Out of paneer today');
       expect((await request.get('/api/orders?scope=history').set(H(tVendor))).body.data.some((x: any) => x.id === o.id)).toBe(true);
     });
 
@@ -702,7 +702,7 @@ describe('Order flow v1', () => {
     });
 
     test('unpaid, cancelled, not-yet-accepted and already-claimed orders cannot be claimed', async () => {
-      const unpaid = await prisma.order.create({ data: { customerId: STUDENT.id, vendorId: 'ven-1', totalAmount: 220, dropoffHostel: 'Médina Fall', status: 'READY_FOR_PICKUP' } });
+      const unpaid = await prisma.order.create({ data: { customerId: CLIENT.id, vendorId: 'ven-1', totalAmount: 220, dropoffHostel: 'Médina Fall', status: 'READY_FOR_PICKUP' } });
       expect((await claim(unpaid.id)).body.code).toBe('ORDER_NOT_AVAILABLE');
       expect((await claim('no-such-order')).status).toBe(404);
       const cancelled = await makePaidOrder('READY_FOR_PICKUP');
@@ -797,7 +797,7 @@ describe('Order flow v1', () => {
       expect(reset.status).toBe(200);
       const fresh = (await db(o.id)).otpCode!;
       expect(fresh).toMatch(/^\d{4}$/);
-      expect((await getOrder(o.id, tStudent)).body.data.otpCode).toBe(fresh);
+      expect((await getOrder(o.id, tClient)).body.data.otpCode).toBe(fresh);
       const ok = await request.post(otpUrl).set(H(tRider)).send({ otpCode: fresh });
       expect(ok.status).toBe(200);
       expect(ok.body.data.status).toBe('DELIVERED');
@@ -826,10 +826,10 @@ describe('Order flow v1', () => {
 
     test('a customer, a restaurant, another rider and an unassigned rider can never complete delivery', async () => {
       const o = await makePaidOrder('ARRIVED_AT_GATE', { driverId: RIDER.id });
-      expect((await request.post(`/api/orders/${o.id}/verify-gate-otp`).set(H(tStudent)).send({ otpCode: '4821' })).status).toBe(403);
+      expect((await request.post(`/api/orders/${o.id}/verify-gate-otp`).set(H(tClient)).send({ otpCode: '4821' })).status).toBe(403);
       expect((await request.post(`/api/orders/${o.id}/verify-gate-otp`).set(H(tVendor)).send({ otpCode: '4821' })).status).toBe(403);
       expect((await request.post(`/api/orders/${o.id}/verify-gate-otp`).set(H(tRider2)).send({ otpCode: '4821' })).status).toBe(404);
-      expect((await setStatus(o.id, 'DELIVERED', tStudent, { otpCode: '4821' })).status).toBe(403);
+      expect((await setStatus(o.id, 'DELIVERED', tClient, { otpCode: '4821' })).status).toBe(403);
       expect((await setStatus(o.id, 'DELIVERED', tVendor, { otpCode: '4821' })).status).toBe(403);
       expect((await db(o.id)).status).toBe('ARRIVED_AT_GATE');
     });
@@ -853,25 +853,25 @@ describe('Order flow v1', () => {
   describe('FM8 customer cancel', () => {
     test('paid order cancelled while PLACED is refunded once; cancelling twice is fine; after accept it is refused', async () => {
       const o = await placePaid();
-      const c1 = await request.post(`/api/orders/${o.id}/cancel`).set(H(tStudent)).send({});
+      const c1 = await request.post(`/api/orders/${o.id}/cancel`).set(H(tClient)).send({});
       expect(c1.status).toBe(200);
       expect(c1.body.data).toMatchObject({ status: 'CANCELLED', cancelledBy: 'CUSTOMER', paymentStatus: 'REFUNDED', refundStatus: 'DONE' });
-      const c2 = await request.post(`/api/orders/${o.id}/cancel`).set(H(tStudent)).send({});
+      const c2 = await request.post(`/api/orders/${o.id}/cancel`).set(H(tClient)).send({});
       expect(c2.status).toBe(200);
       expect(await refundsOf(o.id)).toHaveLength(1);
 
       const accepted = await driveTo('ACCEPTED');
-      const refused = await request.post(`/api/orders/${accepted.id}/cancel`).set(H(tStudent)).send({});
+      const refused = await request.post(`/api/orders/${accepted.id}/cancel`).set(H(tClient)).send({});
       expect(refused.status).toBe(409);
       expect(refused.body.code).toBe('CANNOT_CANCEL');
-      expect((await setStatus(accepted.id, 'CANCELLED', tStudent)).status).toBe(409);
+      expect((await setStatus(accepted.id, 'CANCELLED', tClient)).status).toBe(409);
       expect((await db(accepted.id)).status).toBe('ACCEPTED');
     });
 
     test("someone else's order: 404, unchanged", async () => {
       const o = await placePaid();
-      expect((await request.post(`/api/orders/${o.id}/cancel`).set(H(tStudent2)).send({})).status).toBe(404);
-      expect((await getOrder(o.id, tStudent2)).status).toBe(404);
+      expect((await request.post(`/api/orders/${o.id}/cancel`).set(H(tClient2)).send({})).status).toBe(404);
+      expect((await getOrder(o.id, tClient2)).status).toBe(404);
       expect((await db(o.id)).status).toBe('PLACED');
     });
   });
@@ -925,7 +925,7 @@ describe('Order flow v1', () => {
       expect(row.order.refundError).toBe('Razorpay is down');
       expect(row.order.vendor.phone).toBe(VENDOR.phone); // admin view only
       capture('admin_needs_attention_row', row);
-      expect((await getOrder(o.id, tStudent)).body.data).toMatchObject({ paymentStatus: 'PAID', refundStatus: 'FAILED' });
+      expect((await getOrder(o.id, tClient)).body.data).toMatchObject({ paymentStatus: 'PAID', refundStatus: 'FAILED' });
 
       const still = await runOrderMaintenance(soon());
       expect(still.refundsRetried).toContain(o.id);
@@ -957,7 +957,7 @@ describe('Order flow v1', () => {
     });
 
     test('a paid order with no recorded payment is flagged (no blind refund); admin retry-refund needs a FAILED refund', async () => {
-      const o = await prisma.order.create({ data: { customerId: STUDENT.id, vendorId: 'ven-1', totalAmount: 100, dropoffHostel: 'Médina Fall', status: 'PLACED', paymentStatus: 'PAID', paidAt: new Date() } });
+      const o = await prisma.order.create({ data: { customerId: CLIENT.id, vendorId: 'ven-1', totalAmount: 100, dropoffHostel: 'Médina Fall', status: 'PLACED', paymentStatus: 'PAID', paidAt: new Date() } });
       await request.post(`/api/admin/orders/${o.id}/cancel`).set(H(tAdmin)).send({ reason: 'Legacy order' });
       expect((await db(o.id))).toMatchObject({ refundStatus: 'FAILED' });
       expect((await db(o.id)).refundError).toMatch(/No captured payment/);
@@ -988,7 +988,7 @@ describe('Order flow v1', () => {
       const o = await driveTo('PREPARING');
       await prisma.vendor.update({ where: { id: 'ven-1' }, data: { approvalStatus: 'SUSPENDED' } });
       expect((await getOrder(o.id, tVendor)).status).toBe(200);
-      expect((await getOrder(o.id, tStudent)).status).toBe(200);
+      expect((await getOrder(o.id, tClient)).status).toBe(200);
       expect((await setStatus(o.id, 'READY_FOR_PICKUP', tVendor)).body.code).toBe('PARTNER_NOT_APPROVED');
       const na = await request.get('/api/admin/orders/needs-attention').set(H(tAdmin));
       expect(na.body.data.find((r: any) => r.order.id === o.id)?.problems).toContain('VENDOR_NOT_APPROVED');
@@ -1009,7 +1009,7 @@ describe('Order flow v1', () => {
       expect(re.body.data.driver.id).toBe(RIDER2.id);
       expect((await getOrder(o.id, tRider)).status).toBe(404);
       expect((await setStatus(o.id, 'ARRIVED_AT_GATE', tRider2)).status).toBe(200);
-      const otp = (await getOrder(o.id, tStudent)).body.data.otpCode;
+      const otp = (await getOrder(o.id, tClient)).body.data.otpCode;
       expect((await request.post(`/api/orders/${o.id}/verify-gate-otp`).set(H(tRider2)).send({ otpCode: otp })).status).toBe(200);
       expect(await prisma.adminAuditLog.count({ where: { action: 'ORDER_REASSIGNED', targetId: o.id } })).toBe(1);
     });
@@ -1036,12 +1036,12 @@ describe('Order flow v1', () => {
         expect([url, r.status]).toEqual([url, 401]);
       }
       const wrongRole: [Call, string][] = [
-        [['post', '/api/orders', {}], tVendor], [['get', '/api/orders/available'], tStudent], [['post', `/api/orders/${id}/cancel`, {}], tRider],
-        [['post', `/api/orders/${id}/reject`, { reason: 'abc' }], tStudent], [['post', `/api/orders/${id}/accept-driver`, {}], tAdmin], [['post', `/api/orders/${id}/release`, {}], tVendor],
-        [['post', `/api/orders/${id}/verify-gate-otp`, { otpCode: '1234' }], tStudent], [['patch', `/api/orders/${id}/reassign`, { driverId: null }], tVendor],
-        [['post', `/api/admin/orders/${id}/cancel`, { reason: 'abc' }], tStudent], [['get', '/api/admin/orders/needs-attention'], tRider],
-        [['post', `/api/admin/orders/${id}/reset-otp-lock`, {}], tVendor], [['post', '/api/payments/verify-signature', {}], tVendor], [['post', '/api/drivers/location', { lat: 1, lng: 1 }], tStudent],
-        [['patch', `/api/orders/${id}/status`, { status: 'PREPARING' }], tStudent],
+        [['post', '/api/orders', {}], tVendor], [['get', '/api/orders/available'], tClient], [['post', `/api/orders/${id}/cancel`, {}], tRider],
+        [['post', `/api/orders/${id}/reject`, { reason: 'abc' }], tClient], [['post', `/api/orders/${id}/accept-driver`, {}], tAdmin], [['post', `/api/orders/${id}/release`, {}], tVendor],
+        [['post', `/api/orders/${id}/verify-gate-otp`, { otpCode: '1234' }], tClient], [['patch', `/api/orders/${id}/reassign`, { driverId: null }], tVendor],
+        [['post', `/api/admin/orders/${id}/cancel`, { reason: 'abc' }], tClient], [['get', '/api/admin/orders/needs-attention'], tRider],
+        [['post', `/api/admin/orders/${id}/reset-otp-lock`, {}], tVendor], [['post', '/api/payments/verify-signature', {}], tVendor], [['post', '/api/drivers/location', { lat: 1, lng: 1 }], tClient],
+        [['patch', `/api/orders/${id}/status`, { status: 'PREPARING' }], tClient],
       ];
       for (const [[method, url, body], token] of wrongRole) {
         const r = await (request as any)[method](url).set(H(token)).send(body ?? {});
@@ -1049,8 +1049,8 @@ describe('Order flow v1', () => {
       }
       // Someone else's order: 404, identical to a missing one.
       const others: [Call, string][] = [
-        [['get', `/api/orders/${id}`], tStudent2], [['post', `/api/orders/${id}/cancel`, {}], tStudent2], [['patch', `/api/orders/${id}/status`, { status: 'PREPARING' }], tVendor2],
-        [['post', `/api/orders/${id}/reject`, { reason: 'abc' }], tVendor2], [['post', '/api/payments/create-order', { orderId: id }], tStudent2],
+        [['get', `/api/orders/${id}`], tClient2], [['post', `/api/orders/${id}/cancel`, {}], tClient2], [['patch', `/api/orders/${id}/status`, { status: 'PREPARING' }], tVendor2],
+        [['post', `/api/orders/${id}/reject`, { reason: 'abc' }], tVendor2], [['post', '/api/payments/create-order', { orderId: id }], tClient2],
       ];
       for (const [[method, url, body], token] of others) {
         const r = await (request as any)[method](url).set(H(token)).send(body ?? {});
@@ -1059,10 +1059,10 @@ describe('Order flow v1', () => {
       }
       // Malformed ids and bodies.
       const malformed: [Call, string][] = [
-        [['get', '/api/orders/bad%20id!'], tStudent], [['patch', `/api/orders/${id}/status`, { status: 'EATEN' }], tVendor], [['patch', `/api/orders/${id}/status`, {}], tVendor],
-        [['post', `/api/orders/${id}/cancel`, { reason: { a: 1 } }], tStudent], [['post', '/api/orders', { vendorId: 'ven-1', items: 'lots' }], tStudent],
-        [['post', '/api/orders', { vendorId: ['x'], items: [] }], tStudent], [['get', '/api/orders?scope=everything'], tStudent], [['get', '/api/orders?cursor=%27%3B--'], tStudent],
-        [['post', '/api/payments/create-order', {}], tStudent], [['post', '/api/payments/verify-signature', { razorpayOrderId: 5 }], tStudent],
+        [['get', '/api/orders/bad%20id!'], tClient], [['patch', `/api/orders/${id}/status`, { status: 'EATEN' }], tVendor], [['patch', `/api/orders/${id}/status`, {}], tVendor],
+        [['post', `/api/orders/${id}/cancel`, { reason: { a: 1 } }], tClient], [['post', '/api/orders', { vendorId: 'ven-1', items: 'lots' }], tClient],
+        [['post', '/api/orders', { vendorId: ['x'], items: [] }], tClient], [['get', '/api/orders?scope=everything'], tClient], [['get', '/api/orders?cursor=%27%3B--'], tClient],
+        [['post', '/api/payments/create-order', {}], tClient], [['post', '/api/payments/verify-signature', { razorpayOrderId: 5 }], tClient],
         [['patch', `/api/orders/${id}/reassign`, { driverId: 42 }], tAdmin], [['post', '/api/drivers/location', { lat: 'x', lng: 1 }], tRider],
         [['post', `/api/orders/${id}/reject`, { reason: 7 }], tVendor], [['post', `/api/admin/orders/${id}/cancel`, { reason: '' }], tAdmin],
       ];
@@ -1121,7 +1121,7 @@ describe('Order flow v1', () => {
     });
 
     test('legacy paid orders without paidAt are never auto-refunded; the admin sees them', async () => {
-      const legacy = await prisma.order.create({ data: { customerId: STUDENT.id, vendorId: 'ven-1', totalAmount: 120, dropoffHostel: 'Médina Fall', status: 'PLACED', paymentStatus: 'PAID', createdAt: new Date(Date.now() - 3 * 3600_000) } });
+      const legacy = await prisma.order.create({ data: { customerId: CLIENT.id, vendorId: 'ven-1', totalAmount: 120, dropoffHostel: 'Médina Fall', status: 'PLACED', paymentStatus: 'PAID', createdAt: new Date(Date.now() - 3 * 3600_000) } });
       await runOrderMaintenance(minutesFromNow(60));
       expect((await db(legacy.id)).status).toBe('PLACED');
       const na = await request.get('/api/admin/orders/needs-attention').set(H(tAdmin));
@@ -1136,7 +1136,7 @@ describe('Order flow v1', () => {
   // =========================================================================
   describe('FM14 time', () => {
     test('windows are measured on the server; 14 min old stays, 16 min old expires; deadlines are UTC ISO', async () => {
-      const placed = await place(tStudent, { createdAt: '2000-01-01T00:00:00Z' }); // client times are ignored
+      const placed = await place(tClient, { createdAt: '2000-01-01T00:00:00Z' }); // client times are ignored
       const id = placed.body.data.id;
       expect(Math.abs(Date.parse(placed.body.data.createdAt) - Date.now())).toBeLessThan(60_000);
       expect(placed.body.data.payBy).toMatch(/Z$/);
@@ -1176,7 +1176,7 @@ describe('Order flow v1', () => {
       const pendingRefund = await makePaidOrder('PLACED');
       await prisma.order.update({ where: { id: pendingRefund.id }, data: { status: 'CANCELLED', refundStatus: 'PENDING', refundLeaseUntil: new Date(Date.now() + 3600_000) } });
       await backdate(pendingRefund.id, 10);
-      const legacyCancelled = await prisma.order.create({ data: { customerId: STUDENT.id, vendorId: 'ven-1', totalAmount: 90, dropoffHostel: 'Médina Fall', status: 'CANCELLED', paymentStatus: 'PAID' } });
+      const legacyCancelled = await prisma.order.create({ data: { customerId: CLIENT.id, vendorId: 'ven-1', totalAmount: 90, dropoffHostel: 'Médina Fall', status: 'CANCELLED', paymentStatus: 'PAID' } });
 
       const na = await request.get('/api/admin/orders/needs-attention').set(H(tAdmin));
       expect(na.status).toBe(200);
@@ -1208,8 +1208,8 @@ describe('Order flow v1', () => {
         else if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) { out.add(k); keysOf(x, out); }
         return out;
       };
-      const payloads: Record<string, unknown[]> = { STUDENT: [], VENDOR: [], DRIVER: [], ADMIN: [] };
-      const socketsByRole: [string, Socket][] = [['STUDENT', await connect(tStudent)], ['VENDOR', await connect(tVendor)], ['DRIVER', await connect(tRider)], ['ADMIN', await connect(tAdmin)]];
+      const payloads: Record<string, unknown[]> = { CLIENT: [], VENDOR: [], DRIVER: [], ADMIN: [] };
+      const socketsByRole: [string, Socket][] = [['CLIENT', await connect(tClient)], ['VENDOR', await connect(tVendor)], ['DRIVER', await connect(tRider)], ['ADMIN', await connect(tAdmin)]];
       const ORDER_EVENTS = new Set(['order_updated', 'new_order_alert', 'order_available', 'order_unavailable', 'rider_location']);
       for (const [role, sock] of socketsByRole) sock.onAny((event, data) => { if (ORDER_EVENTS.has(event)) payloads[role].push(data); });
 
@@ -1222,7 +1222,7 @@ describe('Order flow v1', () => {
       payloads.DRIVER.push((await setStatus(o.id, 'PICKED_UP', tRider)).body);
       await request.post('/api/drivers/location').set(H(tRider)).send({ lat: 23.07, lng: 76.85 });
       payloads.DRIVER.push((await setStatus(o.id, 'ARRIVED_AT_GATE', tRider)).body);
-      for (const [role, token] of [['STUDENT', tStudent], ['VENDOR', tVendor], ['DRIVER', tRider], ['ADMIN', tAdmin]] as const) {
+      for (const [role, token] of [['CLIENT', tClient], ['VENDOR', tVendor], ['DRIVER', tRider], ['ADMIN', tAdmin]] as const) {
         payloads[role].push((await getOrder(o.id, token)).body, (await request.get('/api/orders').set(H(token))).body);
       }
       payloads.ADMIN.push((await request.get('/api/admin/orders/needs-attention').set(H(tAdmin))).body);
@@ -1254,10 +1254,10 @@ describe('Order flow v1', () => {
       const old = await makePaidOrder('DELIVERED');
       await prisma.order.update({ where: { id: old.id }, data: { deliveredAt: new Date(Date.now() - 3600_000) } });
       const unpaid = (await place()).body.data.id;
-      const active = (await request.get('/api/orders?scope=active').set(H(tStudent))).body.data.map((o: any) => o.id);
+      const active = (await request.get('/api/orders?scope=active').set(H(tClient))).body.data.map((o: any) => o.id);
       expect(active).toEqual(expect.arrayContaining([done.id, unpaid]));
       expect(active).not.toContain(old.id);
-      const hist = await request.get('/api/orders?scope=history&limit=1').set(H(tStudent));
+      const hist = await request.get('/api/orders?scope=history&limit=1').set(H(tClient));
       expect(hist.body.data).toHaveLength(1);
       expect(hist.body.nextCursor).toBeTruthy();
       expect(hist.body.data.every((o: any) => ['DELIVERED', 'CANCELLED'].includes(o.status))).toBe(true);

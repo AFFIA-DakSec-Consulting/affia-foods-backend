@@ -255,7 +255,7 @@ describe(`Lifecycle stress (seed ${SEED})`, () => {
           if (ev.data?.paymentStatus && !['PAID', 'REFUNDED'].includes(ev.data.paymentStatus)) viol(`[I5] ${tag} paymentStatus ${ev.data.paymentStatus}`);
           if (o && role === 'VENDOR' && vend(o.vendorId).id !== w.who.id) viol(`[I5] ${tag} restaurant ${vend(o.vendorId).id} order reached ${w.who.id}`);
           if (role === 'DRIVER' && ev.event === 'order_updated' && ev.data?.driver?.id !== w.who.id) viol(`[I5] ${tag} rider got an update of an order assigned to ${ev.data?.driver?.id}`);
-        } else if (role === 'STUDENT') {
+        } else if (role === 'CLIENT') {
           if (o && o.customerId !== w.who.id) viol(`[I6] ${tag} customer got another customer's order`);
           if (ev.data?.otpCode && ev.data.status !== 'ARRIVED_AT_GATE') viol(`[I6] ${tag} OTP outside ARRIVED_AT_GATE`);
           if (ev.event === 'driver_location_update' || ev.event === 'new_order_alert' || ev.event === 'order_available') viol(`[I6] ${tag} event type not for customers`);
@@ -498,7 +498,7 @@ describe(`Lifecycle stress (seed ${SEED})`, () => {
   describe('fuzz', () => {
     const fuzzCalls: { method: string; url: string; status: number; note: string }[] = [];
     const base = () => server.baseUrl;
-    const STUDENT = () => W.customers[0].token; const VENDOR = () => W.vendors[0].token; const RIDER = () => W.riders[0].token; const ADMIN = () => W.admin.token;
+    const CLIENT = () => W.customers[0].token; const VENDOR = () => W.vendors[0].token; const RIDER = () => W.riders[0].token; const ADMIN = () => W.admin.token;
 
     const raw = async (method: string, url: string, token: string | null, body: string | undefined, headers: Record<string, string> = {}) => {
       const res = await fetch(`${base()}${url}`, { method, headers: { ...(body !== undefined ? { 'content-type': 'application/json' } : {}), ...(token ? { authorization: `Bearer ${token}` } : {}), ...headers }, body });
@@ -520,14 +520,14 @@ describe(`Lifecycle stress (seed ${SEED})`, () => {
     ];
     const BAD_IDS = ['%00', '..%2F..%2Fetc%2Fpasswd', "%27%3B%20DROP%20TABLE%20%22Order%22%3B--", 'a'.repeat(3000), '%F0%9F%8D%95', 'null', 'undefined', '-1', 'NaN', '0', '00000000-0000-0000-0000-000000000000', '__proto__', 'constructor', '%', '%ZZ', 'x'.repeat(65), '%3Cscript%3E', '%0d%0aX-Injected:1', 'true', '1e999'];
     const ID_ROUTES: [string, string, () => string, boolean][] = [
-      ['get', '/api/orders/:id', STUDENT, false], ['post', '/api/orders/:id/cancel', STUDENT, true], ['patch', '/api/orders/:id/status', VENDOR, true], ['post', '/api/orders/:id/reject', VENDOR, true],
+      ['get', '/api/orders/:id', CLIENT, false], ['post', '/api/orders/:id/cancel', CLIENT, true], ['patch', '/api/orders/:id/status', VENDOR, true], ['post', '/api/orders/:id/reject', VENDOR, true],
       ['post', '/api/orders/:id/accept-driver', RIDER, true], ['post', '/api/orders/:id/release', RIDER, true], ['post', '/api/orders/:id/verify-gate-otp', RIDER, true], ['patch', '/api/orders/:id/status', RIDER, true],
       ['patch', '/api/orders/:id/reassign', ADMIN, true], ['post', '/api/admin/orders/:id/cancel', ADMIN, true], ['post', '/api/admin/orders/:id/reset-otp-lock', ADMIN, true], ['post', '/api/admin/orders/:id/retry-refund', ADMIN, true],
       ['get', '/api/orders/:id', ADMIN, false], ['get', '/api/orders/:id', RIDER, false], ['get', '/api/orders/:id', VENDOR, false],
     ];
     const NOID_ROUTES: [string, string, () => string][] = [
-      ['post', '/api/orders', STUDENT], ['post', '/api/payments/create-order', STUDENT], ['post', '/api/payments/verify-signature', STUDENT], ['post', '/api/drivers/location', RIDER], ['post', '/api/drivers/duty-status', RIDER],
-      ['post', '/api/admin/partners/driver/st-dp-1/status', ADMIN], ['post', '/api/admin/partners/vendor/st-ven-1/status', ADMIN], ['post', '/api/coupons/redeem-coins', STUDENT], ['post', '/api/notifications/register-token', STUDENT], ['put', '/api/auth/profile', STUDENT],
+      ['post', '/api/orders', CLIENT], ['post', '/api/payments/create-order', CLIENT], ['post', '/api/payments/verify-signature', CLIENT], ['post', '/api/drivers/location', RIDER], ['post', '/api/drivers/duty-status', RIDER],
+      ['post', '/api/admin/partners/driver/st-dp-1/status', ADMIN], ['post', '/api/admin/partners/vendor/st-ven-1/status', ADMIN], ['post', '/api/coupons/redeem-coins', CLIENT], ['post', '/api/notifications/register-token', CLIENT], ['put', '/api/auth/profile', CLIENT],
     ];
 
     afterEach(async () => {
@@ -560,14 +560,14 @@ describe(`Lifecycle stress (seed ${SEED})`, () => {
     });
 
     test('PROVE: a request body over 100 kB is answered 413, not 500', async () => {
-      const s = await raw('POST', '/api/orders', STUDENT(), JSON.stringify({ vendorId: 'x', items: [], dropoffNotes: HUGE }));
+      const s = await raw('POST', '/api/orders', CLIENT(), JSON.stringify({ vendorId: 'x', items: [], dropoffNotes: HUGE }));
       expect(s).toBe(413);
     });
 
     test('PROVE: POST /reviews with a non-string orderId is 400, not 500', async () => {
       const bad: string[] = [];
       for (const body of ['{"orderId":["x"]}', '{"orderId":{"a":1}}', '{"orderId":{"$ne":"x"}}', '{"orderId":123}', '{"orderId":true}', '{"orderId":"x","driverRating":{"a":1},"dishReviews":"lots"}']) {
-        const s = await raw('POST', '/api/reviews', STUDENT(), body);
+        const s = await raw('POST', '/api/reviews', CLIENT(), body);
         if (s !== 400) bad.push(`${s} ${body}`);
       }
       expect(bad).toEqual([]);
@@ -577,7 +577,7 @@ describe(`Lifecycle stress (seed ${SEED})`, () => {
       const qs = ['?limit=-5', '?limit=NaN', '?limit=1e9', '?limit=99999999999999999999', '?limit[]=1', '?limit[a]=1', '?scope[]=active', '?scope[a]=b', '?scope=', '?scope=ACTIVE', '?cursor=%00', '?cursor=' + 'a'.repeat(2000),
         '?cursor=00000000-0000-0000-0000-000000000000', '?cursor[]=x', '?status[]=PLACED', '?status=NOPE', '?paymentStatus[$ne]=PAID', '?vendorId[]=a&driverId[]=b&customerId[]=c', '?limit=5&limit=6&limit=7', '?%00=1', '?a=' + 'b'.repeat(8000)];
       const bad: string[] = [];
-      for (const tok of [STUDENT(), VENDOR(), RIDER(), ADMIN()]) {
+      for (const tok of [CLIENT(), VENDOR(), RIDER(), ADMIN()]) {
         for (const q of qs) for (const path of ['/api/orders', '/api/orders/available', '/api/admin/orders/needs-attention']) {
           const s = await raw('GET', path + q, tok, undefined);
           if (s >= 500) bad.push(`${s} GET ${path}${q.slice(0, 30)}`);
@@ -589,7 +589,7 @@ describe(`Lifecycle stress (seed ${SEED})`, () => {
     test('auth abuse: garbage / oversized / wrong-role / tampered tokens never reach 5xx', async () => {
       const bad: string[] = [];
       const forged = (payload: object) => generateTestToken(payload as any);
-      const tokens: (string | null)[] = [null, '', 'x', 'a.b.c', 'A'.repeat(20_000), forged({ id: 'st-cust-1', role: 'HACKER' }), forged({ id: 'st-cust-1', role: ['ADMIN'] }), forged({ role: 'STUDENT' }), forged({ id: 'st-cust-1' }), forged({ id: 'x'.repeat(5000), role: 'DRIVER' })];
+      const tokens: (string | null)[] = [null, '', 'x', 'a.b.c', 'A'.repeat(20_000), forged({ id: 'st-cust-1', role: 'HACKER' }), forged({ id: 'st-cust-1', role: ['ADMIN'] }), forged({ role: 'CLIENT' }), forged({ id: 'st-cust-1' }), forged({ id: 'x'.repeat(5000), role: 'DRIVER' })];
       for (const t of tokens) {
         for (const [m, u] of [['GET', '/api/orders'], ['POST', '/api/orders'], ['GET', '/api/orders/available'], ['POST', '/api/orders/x/accept-driver'], ['POST', '/api/payments/create-order'], ['POST', '/api/drivers/location'], ['GET', '/api/admin/orders/needs-attention'], ['POST', '/api/orders/x/cancel']] as const) {
           const s = await raw(m, u, t, m === 'POST' ? '{}' : undefined);

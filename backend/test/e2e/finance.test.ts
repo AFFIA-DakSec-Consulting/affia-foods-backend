@@ -8,7 +8,7 @@ import supertest from 'supertest';
 import { Role } from '@prisma/client';
 import { startTestServer, stopTestServer, TestServerInstance } from '../harness/app';
 import { prisma, seedTestDatabase, cleanTestOrders, cleanTestUsers } from '../harness/db';
-import { getStudentToken, getVendorToken, getDriverToken, getAdminToken, getAuthHeader } from '../harness/auth';
+import { getClientToken, getVendorToken, getDriverToken, getAdminToken, getAuthHeader } from '../harness/auth';
 import { __resetRateLimits } from '../../src/middleware/rateLimit';
 import { invalidateSettingsCache } from '../../src/services/settings';
 import { createSettlements } from '../../src/services/settlement';
@@ -17,7 +17,7 @@ import { addLocalDays, localDateString, localInstant } from '../../src/utils/tim
 
 jest.setTimeout(90_000);
 
-const STUDENT = { id: 'usr-1', phone: '+221 776543210' };
+const CLIENT = { id: 'usr-1', phone: '+221 776543210' };
 const ADMIN = { id: 'usr-5', phone: '+221 776543214' };
 const F1 = { id: 'usr-fn-v1', phone: '+221 779891111', vendorId: 'fn-ven-1' };
 const F2 = { id: 'usr-fn-v2', phone: '+221 779892222', vendorId: 'fn-ven-2' };
@@ -26,7 +26,7 @@ const R2 = { id: 'usr-fn-d2', phone: '+221 779894444' };
 const VENDORS = [F1.vendorId, F2.vendorId];
 const H = (t: string) => getAuthHeader(t);
 const tAdmin = getAdminToken(ADMIN.id, ADMIN.phone);
-const tStudent = getStudentToken(STUDENT.id, STUDENT.phone);
+const tClient = getClientToken(CLIENT.id, CLIENT.phone);
 const tF1 = getVendorToken(F1.id, F1.phone);
 const tR1 = getDriverToken(R1.id, R1.phone);
 
@@ -54,7 +54,7 @@ describe('Finance analytics and rider payouts (phase 2)', () => {
     const discount = spec.discount ?? 0;
     const order = await prisma.order.create({
       data: {
-        customerId: STUDENT.id, vendorId: spec.vendorId, driverId: spec.driverId ?? null, status: spec.status ?? 'DELIVERED', paymentStatus: spec.paymentStatus ?? 'PAID',
+        customerId: CLIENT.id, vendorId: spec.vendorId, driverId: spec.driverId ?? null, status: spec.status ?? 'DELIVERED', paymentStatus: spec.paymentStatus ?? 'PAID',
         dropoffHostel: 'Cité Lamy', subtotal, vendorSubtotal, commissionTotal, deliveryFee: 25, discount, couponCode: spec.coupon ?? null,
         totalAmount: fromPaise(toPaise(subtotal) + 2500 - toPaise(discount)), deliveredAt: spec.status === 'CANCELLED' || spec.status === 'PICKED_UP' ? null : spec.at, cancelledAt: spec.cancelledAt ?? null,
         items: { create: spec.lines.map((l) => ({ name: l.name, menuItemId: l.id, quantity: l.qty, price: l.price, vendorUnitPrice: l.vendorUnit, commissionUnit: l.commUnit })) },
@@ -270,7 +270,7 @@ describe('Finance analytics and rider payouts (phase 2)', () => {
       }
     }
     for (const ep of ['summary', 'by-restaurant', 'by-dish', 'by-day', 'riders']) {
-      for (const t of [tStudent, tF1, tR1]) expect((await get(`/api/admin/finance/${ep}`, t)).status).toBe(403);
+      for (const t of [tClient, tF1, tR1]) expect((await get(`/api/admin/finance/${ep}`, t)).status).toBe(403);
       expect((await request.get(`/api/admin/finance/${ep}`)).status).toBe(401);
     }
   });
@@ -302,7 +302,7 @@ describe('Finance analytics and rider payouts (phase 2)', () => {
       expect((await get('/api/admin/rider-payouts?from=2020-01-01&to=2020-01-31')).body.total).toBe(0);
       expect((await get('/api/admin/rider-payouts?pageSize=1&page=2')).body).toMatchObject({ count: 1, pages: 2, total: 2 });
       expect(await prisma.adminAuditLog.count({ where: { action: 'RIDER_PAYOUT_RECORDED' } })).toBe(2);
-      for (const t of [tStudent, tF1, tR1]) {
+      for (const t of [tClient, tF1, tR1]) {
         expect((await get('/api/admin/rider-payouts', t)).status).toBe(403);
         expect((await request.post('/api/admin/rider-payouts').set(H(t)).send(good)).status).toBe(403);
       }
@@ -320,7 +320,7 @@ describe('Finance analytics and rider payouts (phase 2)', () => {
         const r = await post(body);
         expect([r.status, r.body.field]).toEqual([400, field]);
       }
-      for (const id of [F1.id, STUDENT.id, randomUUID()]) expect((await post({ ...good, driverUserId: id })).status).toBe(404); // not a rider
+      for (const id of [F1.id, CLIENT.id, randomUUID()]) expect((await post({ ...good, driverUserId: id })).status).toBe(404); // not a rider
       expect(await prisma.riderPayout.count()).toBe(0);
     });
 

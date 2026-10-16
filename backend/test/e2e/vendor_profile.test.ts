@@ -6,7 +6,7 @@
 import supertest from 'supertest';
 import { startTestServer, stopTestServer, TestServerInstance } from '../harness/app';
 import { prisma, seedTestDatabase, cleanTestOrders, cleanTestUsers } from '../harness/db';
-import { getAdminToken, getStudentToken, getVendorToken, getAuthHeader } from '../harness/auth';
+import { getAdminToken, getClientToken, getVendorToken, getAuthHeader } from '../harness/auth';
 import { checkOpeningHours, checkProfile } from '../../src/services/vendorProfile';
 import { sniffImage, uploadRoot } from '../../src/services/imageUpload';
 import { existsSync, mkdtempSync, rmSync } from 'fs';
@@ -94,8 +94,8 @@ describe('Vendor profile', () => {
       expect((await admin('nope-123', { description: 'x' })).status).toBe(404);
       const asVendor = await request.patch('/api/admin/vendors/ven-1/profile').set(H(getVendorToken())).send({ description: 'x' });
       expect(asVendor.status).toBe(403);
-      const asStudent = await request.patch('/api/admin/vendors/ven-1/profile').set(H(getStudentToken())).send({ description: 'x' });
-      expect(asStudent.status).toBe(403);
+      const asClient = await request.patch('/api/admin/vendors/ven-1/profile').set(H(getClientToken())).send({ description: 'x' });
+      expect(asClient.status).toBe(403);
     });
   });
 
@@ -110,7 +110,7 @@ describe('Vendor profile', () => {
     it('validates, and refuses other roles', async () => {
       expect((await own(getVendorToken(), { openingHours: { mon: [{ open: '12:00', close: '08:00' }] } })).status).toBe(400);
       expect((await own(getVendorToken(), {})).status).toBe(400);
-      expect((await own(getStudentToken(), { description: 'x' })).status).toBe(403);
+      expect((await own(getClientToken(), { description: 'x' })).status).toBe(403);
       expect((await request.put('/api/partner/vendor/profile').send({ description: 'x' })).status).toBe(401);
     });
   });
@@ -118,7 +118,7 @@ describe('Vendor profile', () => {
   describe('who sees what', () => {
     it('customers see logo, description and hours but never the phone; admin and owner see the phone', async () => {
       await admin('ven-1', { logoUrl: 'https://example.com/logo.png', description: 'Visible', phone: '77 123 45 67', openingHours: HOURS });
-      const asCustomer = await request.get('/api/vendors/ven-1').set(H(getStudentToken()));
+      const asCustomer = await request.get('/api/vendors/ven-1').set(H(getClientToken()));
       expect(asCustomer.body.data).toMatchObject({ logoUrl: 'https://example.com/logo.png', description: 'Visible', openingHours: HOURS });
       expect(asCustomer.body.data.phone).toBeUndefined();
       const asAdmin = await request.get('/api/vendors/ven-1').set(H(getAdminToken()));
@@ -172,8 +172,8 @@ describe('Vendor profile', () => {
       expect((await adminUpload('logo', Buffer.from('not an image at all, just text'))).status).toBe(415);
       expect((await adminUpload('logo', Buffer.from('<svg></svg>'), 'image/svg+xml')).status).toBe(415);
       expect((await adminUpload('cover', PNG)).status).toBe(400);
-      const asStudent = await request.post('/api/admin/vendors/ven-1/image?kind=logo').set(H(getStudentToken())).set('Content-Type', 'image/png').send(PNG);
-      expect(asStudent.status).toBe(403);
+      const asClient = await request.post('/api/admin/vendors/ven-1/image?kind=logo').set(H(getClientToken())).set('Content-Type', 'image/png').send(PNG);
+      expect(asClient.status).toBe(403);
       const missing = await request.post('/api/admin/vendors/nope-123/image?kind=logo').set(H(getAdminToken())).set('Content-Type', 'image/png').send(PNG);
       expect(missing.status).toBe(404);
     });
@@ -186,7 +186,7 @@ describe('Vendor profile', () => {
       const second = await request.post('/api/partner/vendor/image?kind=banner').set(H(getVendorToken())).set('Content-Type', 'image/png').send(PNG);
       expect((await own(getVendorToken(), { bannerImage: second.body.data.url })).status).toBe(200);
       expect(existsSync(join(dir, 'vendors', firstFile))).toBe(false);
-      expect((await request.post('/api/partner/vendor/image?kind=banner').set(H(getStudentToken())).set('Content-Type', 'image/png').send(PNG)).status).toBe(403);
+      expect((await request.post('/api/partner/vendor/image?kind=banner').set(H(getClientToken())).set('Content-Type', 'image/png').send(PNG)).status).toBe(403);
     });
   });
 });

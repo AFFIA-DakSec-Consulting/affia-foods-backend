@@ -13,6 +13,7 @@ import { writeAudit } from './audit';
 import { createRazorpayOrder } from './paymentService';
 import { queuePush } from './push/pushService';
 import { pushEventsForChange, pushEventsForGroupChange } from './push/events';
+import { scheduleShadow } from '../shared/pricing/shadow';
 import { validateAndCalculateOrder, normaliseCoupon, couponEligibilityProblem } from '../utils/validation';
 
 /**
@@ -34,7 +35,7 @@ export class OrderFlowError extends Error {
   }
 }
 
-export type Actor = { id: string; role: 'STUDENT' | 'VENDOR' | 'DRIVER' | 'ADMIN' | string };
+export type Actor = { id: string; role: 'CLIENT' | 'VENDOR' | 'DRIVER' | 'ADMIN' | string };
 export type CancelledBy = 'CUSTOMER' | 'VENDOR' | 'ADMIN' | 'SYSTEM';
 export type Tx = Prisma.TransactionClient;
 
@@ -209,6 +210,8 @@ export type PlaceOrderInput = {
   vendorId: string;
   items: { itemId: string; quantity: number }[];
   dropoffHostel: string;
+  dropoffLat: number | null;
+  dropoffLng: number | null;
   dropoffNotes: string | null;
   couponCode?: string;
   clientRequestId: string | null;
@@ -358,6 +361,8 @@ export const placeOrder = async (customerId: string, input: PlaceOrderInput): Pr
             couponCode: priced.appliedCoupon ?? null,
             totalAmount: priced.calculatedTotalAmount,
             dropoffHostel: input.dropoffHostel,
+            dropoffLat: input.dropoffLat,
+            dropoffLng: input.dropoffLng,
             dropoffNotes: input.dropoffNotes,
             status: 'PLACED',
             paymentStatus: 'PENDING',
@@ -375,6 +380,11 @@ export const placeOrder = async (customerId: string, input: PlaceOrderInput): Pr
       await auditCancel(r, 'SYSTEM', REPLACED_REASON);
       await finishChange(r, { awaitRefund: false });
     }
+    scheduleShadow({
+      kind: 'order', refId: outcome.order.id, customerId, vendors: [{ id: vendor.id, lat: vendor.lat, lng: vendor.lng }],
+      cartAmount: priced.calculatedSubtotal, dropoffHostel: input.dropoffHostel, dropoffLat: input.dropoffLat, dropoffLng: input.dropoffLng, couponCode: priced.appliedCoupon ?? null,
+      legacy: { fee: priced.calculatedDeliveryFee, discount: priced.calculatedDiscount, total: priced.calculatedTotalAmount }, orderIds: [outcome.order.id],
+    });
     // Unpaid: admins see it; the restaurant and riders do not (orderView filters them out anyway).
     await publishOrderChange(outcome.order);
     return outcome;
@@ -397,9 +407,9 @@ export const placeOrder = async (customerId: string, input: PlaceOrderInput): Pr
 
 /** Razorpay checkout params for the owner's unpaid order. One Razorpay order per Kraveo order (reused on retry). */
 export const createPaymentForOrder = async (orderId: string, actor: Actor) => {
-  await preAuthorize(orderId, (o) => actor.role === 'STUDENT' && o.customerId === actor.id);
+  await preAuthorize(orderId, (o) => actor.role === 'CLIENT' && o.customerId === actor.id);
   return withOrderLock(orderId, async (tx, order, group) => {
-    if (actor.role !== 'STUDENT' || order.customerId !== actor.id) throw notFound();
+    if (actor.role !== 'CLIENT' || order.customerId !== actor.id) throw notFound();
     // Docs/22: ONE payment per combined order, held by the primary child. A sibling can never be paid on its own.
     if (order.groupId && order.groupIndex !== 0) {
       throw new OrderFlowError(409, 'PAY_VIA_GROUP', 'This order is part of a combined order. Pay with the first order of the combined order.', { payOrderId: group?.[0]?.id ?? null });
@@ -651,7 +661,7 @@ export const cancelInTx = async (
   const alreadyCancelled = order.status === 'CANCELLED' && (!group || group.every((c) => isTerminal(c.status)));
   const repair = order.status === 'CANCELLED' && !alreadyCancelled;
   if (by === 'CUSTOMER') {
-    if (actor.role !== 'STUDENT' || order.customerId !== actor.id) throw notFound();
+    if (actor.role !== 'CLIENT' || order.customerId !== actor.id) throw notFound();
     if (alreadyCancelled) return { order, before: order, changed: false };
     if (!repair && (order.status !== 'PLACED' || (group && group.some((c) => c.status !== 'PLACED' && c.status !== 'CANCELLED')))) {
       throw new OrderFlowError(409, 'CANNOT_CANCEL', 'The restaurant has already accepted this order, so it can no longer be cancelled in the app. Please contact Kraveo support.');
@@ -742,7 +752,7 @@ export const cancelOrder = async (
   reason: string,
   opts: { guard?: CancelGuard; awaitRefund?: boolean; deferRefund?: boolean } = {},
 ): Promise<{ order: OrderWithRelations; idempotent: boolean; /** Orders cancelled by this call (1 for a single order, the whole group for a combined one). */ cancelledOrders: number; /** Set when a refund is needed: the order that carries it (the primary child of a group). */ refundOrderId: string | null } | null> => {
-  if (by === 'CUSTOMER') await preAuthorize(orderId, (o) => actor.role === 'STUDENT' && o.customerId === actor.id);
+  if (by === 'CUSTOMER') await preAuthorize(orderId, (o) => actor.role === 'CLIENT' && o.customerId === actor.id);
   else if (by === 'VENDOR') await preAuthorize(orderId, (o) => o.vendorUserId === actor.id);
   const result = await withOrderLock(orderId, (tx, order, group) => cancelInTx(tx, order, actor, by, reason, opts, group));
   if (result.skipped) return null;
