@@ -20,9 +20,27 @@ const IMAGE_BASE = (process.env.SEED_IMAGE_BASE || 'http://localhost:5001/static
 const img = (name: string) => `${IMAGE_BASE}/${name}.jpg`;
 const PASSWORD = 'Kraveo@2026';
 
-/** Representative pin of a quartier (config/campus.ts), nudged a little so restaurants of one quartier do not sit on the same point. */
+const THIES_CENTER = { lat: 14.7886, lng: -16.926 };
+const DEMO_QUARTIER_COORDS: Record<string, { lat: number; lng: number }> = {
+  'Escale': { lat: 14.7886, lng: -16.926 },
+  'Médina Fall': { lat: 14.7926, lng: -16.932 },
+  'Grand Thiès': { lat: 14.7916, lng: -16.937 },
+  'Cité Ndiaye': { lat: 14.7936, lng: -16.920 },
+  'Dixième': { lat: 14.7906, lng: -16.914 },
+  'Randoulène': { lat: 14.8006, lng: -16.922 },
+  'Thiès Nord': { lat: 14.8066, lng: -16.928 },
+  'Parcelles Assainies': { lat: 14.8036, lng: -16.914 },
+  'Keur Mame El Hadji': { lat: 14.7966, lng: -16.940 },
+  'Cité Lamy': { lat: 14.7846, lng: -16.918 },
+  'Thiès Sud': { lat: 14.7766, lng: -16.929 },
+  'Nguinth': { lat: 14.7786, lng: -16.917 },
+  'Mbour 1': { lat: 14.7826, lng: -16.910 },
+  'Diakhao': { lat: 14.7726, lng: -16.938 },
+};
+
+/** Representative pin of a quartier, nudged a little so restaurants of one quartier do not sit on the same point. */
 const pinOf = (quartier: string, n: number) => {
-  const p = DROP_POINTS.find((d) => d.name === quartier)!;
+  const p = DROP_POINTS.find((d) => d.name === quartier) ?? DEMO_QUARTIER_COORDS[quartier] ?? THIES_CENTER;
   return { lat: Math.round((p.lat + 0.0008 * n) * 1e6) / 1e6, lng: Math.round((p.lng - 0.0006 * n) * 1e6) / 1e6 };
 };
 const DELIVERY_FEE = 500; // FCFA: the default all-in fee (settings group "fees")
@@ -159,7 +177,9 @@ const MIN = 60_000;
 const HOUR = 60 * MIN;
 
 async function main() {
-  if (process.env.NODE_ENV === 'production') throw new Error('Refusing to seed demo data when NODE_ENV=production.');
+  if (process.env.NODE_ENV === 'production' && process.env.ALLOW_DEMO_SEED !== 'true' && !process.argv.includes('--force')) {
+    throw new Error('Refusing to seed demo data when NODE_ENV=production. Pass --force or set ALLOW_DEMO_SEED=true to proceed.');
+  }
   const passwordHash = await hashPassword(PASSWORD);
   const now = Date.now();
 
