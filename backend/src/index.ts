@@ -43,28 +43,60 @@ app.disable('x-powered-by');
 app.set('trust proxy', 1);
 const server = http.createServer(app);
 
-const allowedOrigins = [
-  process.env.CLIENT_URL,
-  process.env.ADMIN_URL,
-  // The deployed Super Admin portal uses this Vercel origin when the optional
-  // CLIENT_URL/ADMIN_URL environment variables are not present on EC2.
-  'https://kraveo.vercel.app',
-  'https://admin.kraveo.site',
-  'http://localhost:3000',
-  'http://localhost:5173',
-]
-  .filter((origin): origin is string => Boolean(origin));
-const corsOptions = {
+const parseAllowedOrigins = (): Set<string> => {
+  const set = new Set<string>();
+  const add = (val: string | undefined) => {
+    if (!val) return;
+    for (const part of val.split(',')) {
+      const clean = part.trim().replace(/\/+$/, '');
+      if (clean) set.add(clean);
+    }
+  };
+
+  add(process.env.CLIENT_URL);
+  add(process.env.ADMIN_URL);
+  add(process.env.CORS_ORIGIN);
+  add(process.env.ALLOWED_ORIGINS);
+  add('https://kraveo.vercel.app');
+  add('https://admin.kraveo.site');
+  add('http://localhost:3000');
+  add('http://localhost:5173');
+
+  return set;
+};
+
+const isOriginAllowed = (origin: string | undefined): boolean => {
+  if (!origin) return true;
+  const cleanOrigin = origin.trim().replace(/\/+$/, '');
+
+  if (process.env.CORS_ALLOW_ALL === 'true' || process.env.CORS_ORIGIN === '*' || process.env.ALLOWED_ORIGINS === '*') {
+    return true;
+  }
+
+  const allowed = parseAllowedOrigins();
+  if (allowed.has(cleanOrigin)) return true;
+
+  // Coolify / local wildcard / development hostnames (sslip.io, nip.io, traefik.me, localhost)
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(cleanOrigin)) return true;
+  if (/^https?:\/\/[a-z0-9.-]+\.(sslip|nip)\.io(:\d+)?$/i.test(cleanOrigin)) return true;
+  if (/^https?:\/\/[a-z0-9.-]+\.traefik\.me(:\d+)?$/i.test(cleanOrigin)) return true;
+
+  return false;
+};
+
+const corsOptions: cors.CorsOptions = {
   origin: (origin: string | undefined, callback: (error: Error | null, allow?: boolean) => void) => {
-    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-    return callback(Object.assign(new Error('Origin is not allowed by CORS.'), { status: 403, code: 'CORS_NOT_ALLOWED' }));
+    if (isOriginAllowed(origin)) return callback(null, true);
+    return callback(Object.assign(new Error(`Origin ${origin} is not allowed by CORS.`), { status: 403, code: 'CORS_NOT_ALLOWED' }));
   },
   credentials: true,
 };
 
 const io = new SocketIOServer(server, {
   cors: {
-    origin: allowedOrigins,
+    origin: (origin: string | undefined, callback: (error: Error | null, allow?: boolean) => void) => {
+      callback(null, isOriginAllowed(origin));
+    },
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
     credentials: true,
   },
