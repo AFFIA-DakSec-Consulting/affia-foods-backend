@@ -280,6 +280,8 @@ void main() {
   group('Checkout: delivering to + confirm sheet', () {
     Future<(FakeOrderApi, OrderProvider, FakeGateway, CartProvider, SessionProvider)> open(WidgetTester tester, {String selected = 'Block 2', FakeOrderApi? api, SessionProvider? session}) async {
       api ??= FakeOrderApi();
+      // The payment fails by default, so the order stays unpaid and can be retried.
+      api.onSimulate ??= (id, m) async => const OrderResult.fail(OrderApiError(OrderErrorKind.offline));
       final gateway = FakeGateway()..next = const GatewayResult.cancelled();
       final orders = fakeOrders(api, gateway: gateway);
       final cart = cartWithThali();
@@ -307,7 +309,7 @@ void main() {
 
     testWidgets('Pay opens the sheet: title, grouped chips, current point preselected, nothing is placed yet', (tester) async {
       final (api, _, gateway, _, _) = await open(tester);
-      await tapButton(tester, 'Pay ₹145');
+      await tapButton(tester, 'Pay 145 FCFA');
       expect(find.text(sheetTitle), findsOneWidget);
       expect(find.text('BOYS'), findsOneWidget);
       expect(find.text('GIRLS'), findsOneWidget);
@@ -322,7 +324,7 @@ void main() {
 
     testWidgets('Confirm and pay keeps the current point; the order is created for it', (tester) async {
       final (api, _, _, _, session) = await open(tester);
-      await tapButton(tester, 'Pay ₹145');
+      await tapButton(tester, 'Pay 145 FCFA');
       await tapButton(tester, 'Confirm and pay');
       expect(find.text(sheetTitle), findsNothing);
       expect(api.creates, hasLength(1));
@@ -332,7 +334,7 @@ void main() {
 
     testWidgets('choosing another point places the order there and never touches the saved profile point', (tester) async {
       final (api, orders, _, _, session) = await open(tester);
-      await tapButton(tester, 'Pay ₹145');
+      await tapButton(tester, 'Pay 145 FCFA');
       await tapChip(tester, 'GH1');
       expect(tester.widget<KChoiceChip>(chip('GH1')).selected, isTrue);
       expect(tester.widget<KChoiceChip>(chip('BH2')).selected, isFalse);
@@ -346,57 +348,57 @@ void main() {
 
     testWidgets('Cancel (and the close button) place nothing and charge nothing; paying again works', (tester) async {
       final (api, _, gateway, _, _) = await open(tester);
-      await tapButton(tester, 'Pay ₹145');
+      await tapButton(tester, 'Pay 145 FCFA');
       await tester.tap(find.text('Cancel'));
       await settle(tester);
       expect(find.text(sheetTitle), findsNothing);
       expect(api.creates, isEmpty);
       expect(gateway.opened, isEmpty);
-      expect(button('Pay ₹145'), findsOneWidget);
-      expect(tester.widget<KButton>(button('Pay ₹145')).loading, isFalse);
+      expect(button('Pay 145 FCFA'), findsOneWidget);
+      expect(tester.widget<KButton>(button('Pay 145 FCFA')).loading, isFalse);
 
-      await tapButton(tester, 'Pay ₹145');
+      await tapButton(tester, 'Pay 145 FCFA');
       await tester.tap(find.byIcon(LucideIcons.x));
       await settle(tester);
       expect(api.creates, isEmpty);
 
-      await tapButton(tester, 'Pay ₹145');
+      await tapButton(tester, 'Pay 145 FCFA');
       await tapButton(tester, 'Confirm and pay');
       expect(api.creates, hasLength(1));
     });
 
     testWidgets('the sheet appears once per payment attempt: paying or retrying the created order never asks again', (tester) async {
-      final (api, _, gateway, _, _) = await open(tester);
-      await tapButton(tester, 'Pay ₹145');
+      final (api, _, _, _, _) = await open(tester);
+      await tapButton(tester, 'Pay 145 FCFA');
       await tapButton(tester, 'Confirm and pay');
-      // The server priced it at ₹245 (not the ₹145 estimate), so the bill is shown first.
-      expect(find.text('Updated total: ₹245'), findsOneWidget);
+      // The server priced it at 245 FCFA (not the 145 FCFA estimate), so the bill is shown first.
+      expect(find.text('Updated total: 245 FCFA'), findsOneWidget);
       expect(find.text(sheetTitle), findsNothing);
 
-      await tapButton(tester, 'Pay ₹245');
+      await tapButton(tester, 'Pay 245 FCFA');
       expect(find.text(sheetTitle), findsNothing);
-      expect(gateway.opened, hasLength(1));
-      expect(button('Try payment again · ₹245'), findsOneWidget);
+      expect(api.simulations, hasLength(1));
+      expect(button('Try payment again · 245 FCFA'), findsOneWidget);
 
-      await tapButton(tester, 'Try payment again · ₹245');
+      await tapButton(tester, 'Try payment again · 245 FCFA');
       expect(find.text(sheetTitle), findsNothing);
-      expect(gateway.opened, hasLength(2));
+      expect(api.simulations, hasLength(2));
       expect(api.creates, hasLength(1), reason: 'same order, no second POST');
-      expect(api.paymentStarts.toSet(), hasLength(1));
+      expect(api.simulations.map((e) => e.$1).toSet(), hasLength(1));
     });
 
     testWidgets('same cart + same point replays the same idempotency key; a different point gets a new one', (tester) async {
       final api = FakeOrderApi()..onCreate = (r) async => const OrderResult.fail(OrderApiError(OrderErrorKind.offline));
       await open(tester, api: api);
-      await tapButton(tester, 'Pay ₹145');
+      await tapButton(tester, 'Pay 145 FCFA');
       await tapButton(tester, 'Confirm and pay');
-      await tapButton(tester, 'Pay ₹145');
+      await tapButton(tester, 'Pay 145 FCFA');
       await tapButton(tester, 'Confirm and pay');
       expect(api.creates, hasLength(2));
       expect(api.creates[1].clientRequestId, api.creates[0].clientRequestId, reason: 'a retry of the same request is safe');
       expect(api.creates[1].dropoffHostel, 'BH2');
 
-      await tapButton(tester, 'Pay ₹145');
+      await tapButton(tester, 'Pay 145 FCFA');
       await tapChip(tester, 'GH2');
       await tapButton(tester, 'Confirm and pay');
       expect(api.creates, hasLength(3));
@@ -407,7 +409,7 @@ void main() {
     testWidgets('a legacy saved value is normalised: preselected and sent as the new name', (tester) async {
       final (api, _, _, _, _) = await open(tester, selected: 'Boys Hostel Block 3');
       expect(find.text('BH3'), findsOneWidget);
-      await tapButton(tester, 'Pay ₹145');
+      await tapButton(tester, 'Pay 145 FCFA');
       expect(tester.widgetList<KChoiceChip>(find.byType(KChoiceChip)).where((c) => c.selected).map((c) => c.label), ['BH3']);
       await tapButton(tester, 'Confirm and pay');
       expect(api.creates.single.dropoffHostel, 'BH3');

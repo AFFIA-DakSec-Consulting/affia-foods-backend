@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Layout
 
-`web/` holds two independent Vite sites, each with its own `package.json` and `vercel.json` (deployed separately on Vercel). There is no root package — run commands inside the sub-folder. Sibling folders in the monorepo: `../backend` (API at `https://api.kraveo.site`), `../flutter` (customer / restaurant / rider apps), `../Docs` (specs and contracts).
+`web/` holds two independent Vite sites, each with its own `package.json` and `Dockerfile` (built with Node and served by nginx, deployed separately on Dokploy; there is no Netlify or Vercel). There is no root package — run commands inside the sub-folder. Sibling folders in the monorepo: `../backend` (API at `http://s598n3mrwe6p76b2bv2exazh.192.162.70.47.sslip.io`), `../flutter` (customer / restaurant / rider apps), `../Docs` (specs and contracts).
 
 ## Commands
 
@@ -39,9 +39,9 @@ There is no linter configured; `tsc` in `npm run build` is the type check for `s
 
 ### Production constraints
 
-- `assetsInlineLimit: 0` in `vite.config.ts` is deliberate: the CSP in `super_admin/vercel.json` only allows `font-src 'self'`, so fonts must not be inlined as data URIs.
-- The CSP also limits `connect-src` to `api.kraveo.site` (https + wss) and `img-src` to OpenStreetMap tiles. Any new external host (API, map tiles, fonts, scripts) must be added to `vercel.json` or it will break in production only.
-- Backend URLs: `VITE_API_BASE_URL` / `VITE_SOCKET_URL`, defaulting to `http://localhost:5000` in dev and `https://api.kraveo.site` in prod.
+- `assetsInlineLimit: 0` in `vite.config.ts` is deliberate: the CSP in `super_admin/nginx.conf.template` only allows `font-src 'self'`, so fonts must not be inlined as data URIs.
+- The CSP also limits `connect-src` to the API origin (`API_ORIGIN` / `API_WS_ORIGIN`, set in the `Dockerfile`, overridable in Dokploy) and `img-src` to OpenStreetMap tiles. Any new external host (API, map tiles, fonts, scripts) must be added to `nginx.conf.template` or it will break in production only.
+- Backend URLs: `VITE_API_BASE_URL` / `VITE_SOCKET_URL` (Docker build arguments in the `Dockerfile`), defaulting to `http://localhost:5001` in dev and `http://s598n3mrwe6p76b2bv2exazh.192.162.70.47.sslip.io` in prod. The API is on `http`: the dashboard must be served over `http` too, or the browser blocks the calls (mixed content).
 
 ## landing architecture
 

@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/api_config.dart';
 import '../models/auth_results.dart';
+import '../models/customer_user.dart';
 
 class CustomerApiService {
   static const String _tokenPrefKey = 'kraveo_customer_jwt_token';
@@ -249,7 +250,7 @@ class CustomerApiService {
         return GoogleLoginResult(success: false, statusCode: response.statusCode, message: _msg(body));
       }
       final userMap = Map<String, dynamic>.from(user);
-      if (userMap['role'] != null && userMap['role'] != 'STUDENT') {
+      if (!isCustomerRole(userMap['role'])) {
         return const GoogleLoginResult(success: false, statusCode: 403, message: 'This Google account can\'t sign in to the Kraveo customer app.');
       }
       await saveToken(token);
@@ -300,6 +301,7 @@ class CustomerApiService {
         message: _msg(body),
         phone: canonical,
         channel: body['channel']?.toString(),
+        debugCode: body['debugCode'] is String ? body['debugCode'] as String : null,
         expiresInSeconds: _seconds(body['expiresInSeconds']) ?? 300,
         resendAfterSeconds: _seconds(body['resendAfterSeconds']) ?? 45,
       );
@@ -334,7 +336,7 @@ class CustomerApiService {
         );
       }
       final userMap = Map<String, dynamic>.from(user);
-      if (userMap['role'] != null && userMap['role'] != 'STUDENT') {
+      if (!isCustomerRole(userMap['role'])) {
         return const OtpVerifyResult(success: false, statusCode: 403, errorCode: 'PARTNER_ACCOUNT', message: 'This number belongs to a Kraveo partner. Please use the partner app.');
       }
       await saveToken(token);

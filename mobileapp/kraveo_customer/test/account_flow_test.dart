@@ -1295,22 +1295,23 @@ void main() {
       expect(find.text('Choose drop-off point'), findsOneWidget);
       expect(find.text('Required before you can pay'), findsOneWidget);
       expect(find.text('Choose drop-off'), findsOneWidget);
-      expect(find.textContaining('Pay ₹'), findsNothing);
+      expect(find.textContaining(RegExp(r'^Pay \d')), findsNothing);
 
       // Tapping the pay button opens the picker instead of creating an order.
       await tester.tap(find.text('Choose drop-off'));
       await settle(tester);
       expect(find.text('Where should we deliver?'), findsOneWidget);
-      // Docs/22: checkout now asks the server for the price (POST /orders/quote, writes nothing); no order is created.
-      expect(backend.requests.where((r) => !r.url.path.endsWith('/orders/quote')), isEmpty);
+      // Docs/22: checkout asks the server for the price (POST /orders/quote) and the payment
+      // methods (GET /payments/methods); both write nothing, and no order is created.
+      expect(backend.requests.where((r) => !r.url.path.endsWith('/orders/quote') && !r.url.path.endsWith('/payments/methods')), isEmpty);
 
       await tester.tap(find.text('BH6'));
       await settle(tester);
       expect(find.text('Choose drop-off point'), findsNothing);
       expect(find.text('BH6'), findsOneWidget);
-      expect(find.textContaining('Pay ₹'), findsOneWidget);
+      expect(find.textContaining(RegExp(r'^Pay \d')), findsOneWidget);
       expect(session.deliveryPoint, 'BH6', reason: 'remembered for the next checkout this session');
-      expect(backend.requests.where((r) => !r.url.path.endsWith('/orders/quote')), isEmpty, reason: 'a non-student\'s choice is never sent to the server');
+      expect(backend.requests.where((r) => r.method != 'GET' && !r.url.path.endsWith('/orders/quote')), isEmpty, reason: 'a non-student\'s choice is never sent to the server');
       expect(tester.takeException(), isNull);
     });
 
@@ -1319,7 +1320,7 @@ void main() {
       await pumpWithProviders(tester, const CheckoutScreen(selectedHostel: 'Block 2'), session: session, cart: cartWithItem());
       expect(find.text('Choose drop-off point'), findsNothing);
       expect(find.text('BH2'), findsOneWidget);
-      expect(find.textContaining('Pay ₹'), findsOneWidget);
+      expect(find.textContaining(RegExp(r'^Pay \d')), findsOneWidget);
     });
   });
 
@@ -1367,7 +1368,7 @@ void main() {
       await tester.pump(const Duration(seconds: 5));
 
       expect(server.putBodies, hasLength(1));
-      expect(find.text('DELIVERING TO'), findsOneWidget);
+      expect(find.text('LIVRER À'), findsOneWidget);
       expect(find.text('BH3'), findsWidgets);
       expect(kAvatarWithId(5), findsWidgets, reason: 'greeting shows the chosen avatar');
       expect(google.signInCalls, 1);
@@ -1381,13 +1382,13 @@ void main() {
       await tester.pump(const Duration(milliseconds: 200));
       await tester.pump(const Duration(seconds: 5));
 
-      expect(find.text('DELIVERING TO'), findsOneWidget);
+      expect(find.text('LIVRER À'), findsOneWidget);
       expect(find.text('BH3'), findsWidgets);
-      expect(find.textContaining(', AARAV'), findsOneWidget);
+      expect(find.byType(KAvatar), findsWidgets, reason: 'the header shows the student\'s avatar');
       final ctx = tester.element(find.byType(Scaffold).first);
       expect(ctx.read<CartProvider>().userKraveoCoins, 120, reason: 'seeded from the backend');
 
-      await tester.tap(find.byIcon(LucideIcons.user).last);
+      await tester.tap(find.byType(KAvatar).first);
       await settle(tester);
       expect(find.text('aarav@example.com'), findsWidgets);
 
@@ -1415,9 +1416,9 @@ void main() {
       FakeServer(backend, seed: userJson(isStudent: false, hostel: null), isNewUser: false);
       await launch(tester);
       await tester.pump(const Duration(seconds: 5));
-      expect(find.text('DELIVERY POINT'), findsOneWidget);
-      expect(find.text('Choose drop point'), findsOneWidget);
-      expect(find.text('DELIVERING TO'), findsNothing);
+      expect(find.text('POINT DE LIVRAISON'), findsOneWidget);
+      expect(find.text('Choisir un point'), findsOneWidget);
+      expect(find.text('LIVRER À'), findsNothing);
     });
 
     testWidgets('a session that still needs a profile lands on sign-up step 1', (tester) async {
@@ -1444,7 +1445,7 @@ void main() {
       final google = FakeGoogleAuth();
       await launch(tester, google: google);
       await tester.pump(const Duration(seconds: 5));
-      expect(find.text('DELIVERING TO'), findsOneWidget);
+      expect(find.text('LIVRER À'), findsOneWidget);
 
       OrderResult<Object?>? result;
       await tester.runAsync(() async {
@@ -1497,7 +1498,7 @@ void main() {
       await tester.tap(find.text('Try again'));
       await tester.pump(const Duration(milliseconds: 200));
       await tester.pump(const Duration(seconds: 6));
-      expect(find.text('DELIVERING TO'), findsOneWidget);
+      expect(find.text('LIVRER À'), findsOneWidget);
     });
   });
 }

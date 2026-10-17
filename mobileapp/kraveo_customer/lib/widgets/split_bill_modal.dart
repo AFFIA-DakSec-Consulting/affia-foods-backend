@@ -26,7 +26,7 @@ class _SplitBillModalState extends State<SplitBillModal> {
   int _roommateCount = 2;
 
   String get _formattedPerPerson {
-    return (widget.order.totalAmount / _roommateCount).round().toString();
+    return fcfa(widget.order.totalAmount / _roommateCount);
   }
 
   String get _splitSummaryText {
@@ -38,12 +38,12 @@ class _SplitBillModalState extends State<SplitBillModal> {
     buffer.writeln('--------------------------------');
     if (widget.order.items.isNotEmpty) {
       for (final item in widget.order.items) {
-        buffer.writeln('- ${item.quantity}x ${item.name} - ${rupee(item.lineTotal)}');
+        buffer.writeln('- ${item.quantity}x ${item.name} - ${fcfa(item.lineTotal)}');
       }
       buffer.writeln('--------------------------------');
     }
-    buffer.writeln('Total bill: ${rupee(widget.order.totalAmount)}');
-    buffer.writeln('Split among $_roommateCount roommates: *₹$perPerson per person*');
+    buffer.writeln('Total bill: ${fcfa(widget.order.totalAmount)}');
+    buffer.writeln('Split among $_roommateCount roommates: *$perPerson per person*');
     buffer.writeln('Pay via UPI to the one who ordered.');
     return buffer.toString();
   }
@@ -84,11 +84,11 @@ class _SplitBillModalState extends State<SplitBillModal> {
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text('EACH PERSON PAYS', style: KraveoType.label.copyWith(color: k.brand)),
                 const SizedBox(height: 4),
-                Text('₹$perPersonAmount', style: KraveoType.displayMd.copyWith(color: k.ink)),
+                Text(perPersonAmount, style: KraveoType.displayMd.copyWith(color: k.ink)),
               ]),
             ),
             const SizedBox(width: 12),
-            Text('of ${rupee(widget.order.totalAmount)}', style: KraveoType.body.copyWith(color: k.inkMuted, fontWeight: FontWeight.w700)),
+            Text('of ${fcfa(widget.order.totalAmount)}', style: KraveoType.body.copyWith(color: k.inkMuted, fontWeight: FontWeight.w700)),
           ]),
         ),
         const SizedBox(height: 18),

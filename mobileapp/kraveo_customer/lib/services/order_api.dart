@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/order.dart';
+import '../models/payment_method.dart';
 import '../models/order_group.dart';
 import 'customer_api_service.dart';
 import 'external_links.dart';
@@ -104,6 +105,16 @@ class PaymentSession {
 }
 
 /// The three values Razorpay hands back on success; the server verifies the signature.
+/// Answer of `POST /payments/simulate`.
+class SimulatedPayment {
+  const SimulatedPayment({this.order, this.pendingConfirmation = false});
+
+  final OrderModel? order;
+
+  /// The server took the payment but still has to confirm it.
+  final bool pendingConfirmation;
+}
+
 class PaymentProof {
   const PaymentProof({required this.razorpayOrderId, required this.razorpayPaymentId, required this.razorpaySignature});
   final String razorpayOrderId;
@@ -192,6 +203,13 @@ abstract class OrderApi {
 
   /// Returns the updated order when the server includes it, otherwise null (still a success).
   Future<OrderResult<OrderModel?>> verifyPayment(PaymentProof proof);
+
+  /// `GET /payments/methods`: Wave, Orange Money, cash, with their logos.
+  Future<OrderResult<PaymentMethodsInfo>> fetchPaymentMethods();
+
+  /// `POST /payments/simulate` (servers with `PAYMENT_PROVIDER=simulated`): pays [orderId] with
+  /// [method] at once, nobody is charged. A server with a real provider answers 404.
+  Future<OrderResult<SimulatedPayment>> simulatePayment(String orderId, String method);
   Future<OrderResult<ReviewReceipt>> submitReview(ReviewRequest request);
 }
 
@@ -276,6 +294,25 @@ class HttpOrderApi implements OrderApi {
         timeout: _write,
         // Success may or may not carry the order; both are fine.
         parse: (body) => body['success'] == false ? null : _Maybe(OrderModel.tryParse(body['data'] ?? body['order'])),
+      );
+
+  @override
+  Future<OrderResult<PaymentMethodsInfo>> fetchPaymentMethods() => _call(
+        'GET',
+        '/payments/methods',
+        timeout: _read,
+        parse: (body) => body['success'] == false ? null : PaymentMethodsInfo.fromJson(body['data']),
+      );
+
+  @override
+  Future<OrderResult<SimulatedPayment>> simulatePayment(String orderId, String method) => _call(
+        'POST',
+        '/payments/simulate',
+        body: {'orderId': orderId, 'method': method},
+        timeout: _write,
+        parse: (body) => body['success'] == false
+            ? null
+            : SimulatedPayment(order: OrderModel.tryParse(body['data'] ?? body['order']), pendingConfirmation: body['status'] == 'PENDING_CONFIRMATION'),
       );
 
   @override
@@ -423,7 +460,7 @@ const Map<String, String> _codeMessages = {
   'VENDOR_CLOSED': 'This restaurant is closed for new orders right now.',
   'CLIENT_REQUEST_MISMATCH': 'Your order changed while it was being sent. Please tap the button again to place it.',
   'VENDOR_UNAVAILABLE': 'This restaurant isn\'t available right now.',
-  'AMOUNT_TOO_SMALL': 'The order total must be at least ₹1.',
+  'AMOUNT_TOO_SMALL': 'The order total must be at least 100 FCFA.',
   'PROVIDER_UNAVAILABLE': 'The payment service is not responding right now. Please try again in a minute.',
   'NOT_FOUND': 'We couldn\'t find this order.',
   'PAY_VIA_GROUP': 'This order is paid together with the other restaurants in it. Open the combined order to pay.',

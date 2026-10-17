@@ -2,7 +2,7 @@
 
 Owner decisions (settled): dual mode. (1) The restaurant sets its own pin from the Restaurant Partner app by auto-detecting with the phone's GPS: offered in the create-account form (next to "where is the kitchen") and, if still missing, asked again with a popup at every login/app start until it is set. (2) Admin can always set or correct any restaurant's pin by typing coordinates in the dashboard (already built: vendor drawer/manager and add-partner). If GPS fails the restaurant is NOT locked out: the popup can be dismissed ("Not now"), a banner stays until the pin exists, and admin can fix it from the dashboard. Everything must degrade gracefully and must not regress what works today.
 
-Existing building blocks (Docs/19): `backend/src/config/campus.ts` (`checkVendorLocation`, `isNearCampus` within 3 km of the campus centre, `vendorHasLocation`, placeholder pin 23.0768/76.8524 = "not set"), admin `PATCH /api/admin/vendors/:id/location`, `OrderView.vendor.hasLocation`, dashboard CampusMap + vendor location input.
+Existing building blocks (Docs/19): `backend/src/config/campus.ts` (`checkVendorLocation`, `inSenegal` (inside the box of Senegal; where the app is available is decided by the service areas, Docs/27), `vendorHasLocation`, placeholder pin 23.0768/76.8524 = "not set"), admin `PATCH /api/admin/vendors/:id/location`, `OrderView.vendor.hasLocation`, dashboard CampusMap + vendor location input.
 
 ## 1. Backend (and the web dashboard)
 

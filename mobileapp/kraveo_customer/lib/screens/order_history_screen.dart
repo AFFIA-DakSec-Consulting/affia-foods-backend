@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:kraveo_ui/kraveo_ui.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
+import '../widgets/ui/k_icon_button.dart';
 import '../models/order.dart';
 import '../providers/cart_provider.dart';
 import '../providers/order_provider.dart';
@@ -133,8 +134,15 @@ class OrderHistoryScreen extends StatelessWidget {
       backgroundColor: k.bg,
       appBar: AppBar(
         automaticallyImplyLeading: false,
+        leading: Navigator.of(context).canPop()
+            ? Padding(
+                padding: const EdgeInsets.only(left: 20),
+                child: Center(child: KIconButton(icon: LucideIcons.arrowLeft, semanticLabel: 'Back', onTap: () => Navigator.of(context).maybePop())),
+              )
+            : null,
+        leadingWidth: Navigator.of(context).canPop() ? 68 : null,
         toolbarHeight: 68,
-        titleSpacing: KSpace.gutter,
+        titleSpacing: Navigator.of(context).canPop() ? 0 : KSpace.gutter,
         title: const Text('Your orders'),
       ),
       body: body,
@@ -195,7 +203,7 @@ class _OrderCard extends StatelessWidget {
 
   String get _summary {
     if (order.items.isEmpty) {
-      return 'Items ${rupee(order.subtotal)} · Fees ${rupee(order.deliveryFee + order.taxAndPackaging)}';
+      return 'Items ${fcfa(order.subtotal)} · Fees ${fcfa(order.deliveryFee + order.taxAndPackaging)}';
     }
     final parts = order.items.map((i) => '${i.quantity} × ${i.name}').toList();
     if (parts.length <= 2) return parts.join(', ');
@@ -236,7 +244,7 @@ class _OrderCard extends StatelessWidget {
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(order.isPaid || delivered ? 'PAID' : 'TOTAL', style: KraveoType.caption.copyWith(color: k.inkFaint, letterSpacing: 0.8)),
-                Text(rupee(order.totalAmount), style: KraveoType.numericSm.copyWith(color: k.ink)),
+                Text(fcfa(order.totalAmount), style: KraveoType.numericSm.copyWith(color: k.ink)),
               ]),
             ),
             Text(orderRef(order.id), style: KraveoType.caption.copyWith(color: k.inkFaint)),

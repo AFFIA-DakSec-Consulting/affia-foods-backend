@@ -56,7 +56,7 @@ class _CouponBoxState extends State<CouponBox> {
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('${cart.appliedCouponCode} applied', style: KraveoType.titleMd.copyWith(color: k.brand)),
-            Text('You save ${rupee(cart.couponDiscountAmount)} on this order.', style: KraveoType.bodySm.copyWith(color: k.inkMuted)),
+            Text('You save ${fcfa(cart.couponDiscountAmount)} on this order.', style: KraveoType.bodySm.copyWith(color: k.inkMuted)),
           ]),
         ),
         KPressable(

@@ -99,17 +99,17 @@ void main() {
     });
 
     test('Promo Code VITFIRST - minimum subtotal validation', () {
-      cart.addItem(item: dummyItem2, dhabaId: 'ven-1', dhabaName: 'Sharma Dhaba'); // ₹50 subtotal
+      cart.addItem(item: dummyItem2, dhabaId: 'ven-1', dhabaName: 'Sharma Dhaba'); // 50 FCFA subtotal
       final result = cart.applyCoupon('VITFIRST');
 
       expect(result, isFalse);
       expect(cart.appliedCouponCode, isNull);
       expect(cart.couponDiscountAmount, equals(0.0));
-      expect(cart.couponError, contains('Minimum subtotal of ₹100 required'));
+      expect(cart.couponError, contains('Minimum subtotal of 100 FCFA required'));
     });
 
     test('Promo Code VITFIRST - 20% discount calculation', () {
-      cart.addItem(item: dummyItem1, dhabaId: 'ven-1', dhabaName: 'Sharma Dhaba'); // ₹180 subtotal
+      cart.addItem(item: dummyItem1, dhabaId: 'ven-1', dhabaName: 'Sharma Dhaba'); // 180 FCFA subtotal
       final result = cart.applyCoupon('VITFIRST');
 
       expect(result, isTrue);
@@ -118,7 +118,7 @@ void main() {
       expect(cart.grandTotal, equals(169.0)); // 180 + 25 - 36
     });
 
-    test('Promo Code VITFIRST - discount capped at ₹50', () {
+    test('Promo Code VITFIRST - discount capped at 50 FCFA', () {
       cart.addItem(item: dummyItem1, dhabaId: 'ven-1', dhabaName: 'Sharma Dhaba');
       cart.addItem(item: dummyItem1, dhabaId: 'ven-1', dhabaName: 'Sharma Dhaba'); // 2x 180 = 360 subtotal
       final result = cart.applyCoupon('VITFIRST');
@@ -128,7 +128,7 @@ void main() {
     });
 
     test('KRAVEO20 is not offered by the app any more (the server only accepts it after 50 coins are redeemed, which the app cannot do)', () {
-      cart.addItem(item: dummyItem1, dhabaId: 'ven-1', dhabaName: 'Sharma Dhaba'); // ₹180 subtotal
+      cart.addItem(item: dummyItem1, dhabaId: 'ven-1', dhabaName: 'Sharma Dhaba'); // 180 FCFA subtotal
       final result = cart.applyCoupon('KRAVEO20');
 
       expect(result, isFalse);
@@ -138,7 +138,7 @@ void main() {
       expect(cart.couponError, isNot(contains('KRAVEO20')), reason: 'the hint must not advertise it');
     });
 
-    test('Promo Code KRAVEO50 keeps its client rule (min ₹150, flat ₹50)', () {
+    test('Promo Code KRAVEO50 keeps its client rule (min 150 FCFA flat 50 FCFA)', () {
       cart.addItem(item: dummyItem1, dhabaId: 'ven-1', dhabaName: 'Sharma Dhaba');
       expect(cart.applyCoupon('KRAVEO50'), isTrue);
       expect(cart.couponDiscountAmount, 50.0);
@@ -146,7 +146,7 @@ void main() {
       cart.clearCart();
       cart.addItem(item: dummyItem2, dhabaId: 'ven-1', dhabaName: 'Sharma Dhaba');
       expect(cart.applyCoupon('KRAVEO50'), isFalse);
-      expect(cart.couponError, contains('₹150'));
+      expect(cart.couponError, contains('150 FCFA'));
     });
 
     test('at most 20 of one dish: further adds and increments are refused (all option variants count together)', () {
@@ -168,19 +168,19 @@ void main() {
 
     test('Kraveo Coins are a balance only: they never lower the estimate (the server cannot redeem them)', () {
       cart.setKraveoCoins(120);
-      cart.addItem(item: dummyItem1, dhabaId: 'ven-1', dhabaName: 'Sharma Dhaba'); // ₹180 subtotal
+      cart.addItem(item: dummyItem1, dhabaId: 'ven-1', dhabaName: 'Sharma Dhaba'); // 180 FCFA subtotal
       expect(cart.userKraveoCoins, 120);
       expect(cart.grandTotal, equals(205.0)); // 180 + 25 (one all-in fee)
     });
 
     test('Decrementing item invalidates coupon when subtotal falls below threshold', () {
-      cart.addItem(item: dummyItem1, dhabaId: 'ven-1', dhabaName: 'Sharma Dhaba'); // ₹180
+      cart.addItem(item: dummyItem1, dhabaId: 'ven-1', dhabaName: 'Sharma Dhaba'); // 180 FCFA
       cart.applyCoupon('VITFIRST');
       expect(cart.appliedCouponCode, equals('VITFIRST'));
 
       // Decrement item 1 quantity by switching to lesser item
       cart.removeItem(cart.items.first.cartItemId);
-      cart.addItem(item: dummyItem2, dhabaId: 'ven-1', dhabaName: 'Sharma Dhaba'); // ₹50
+      cart.addItem(item: dummyItem2, dhabaId: 'ven-1', dhabaName: 'Sharma Dhaba'); // 50 FCFA
 
       expect(cart.subtotal, equals(50.0));
       expect(cart.appliedCouponCode, isNull);
@@ -237,13 +237,13 @@ void main() {
       );
 
       expect(find.text('Split the bill'), findsOneWidget);
-      expect(find.text('₹115'), findsOneWidget); // 230 / 2 = 115
+      expect(find.text('115 FCFA'), findsOneWidget); // 230 / 2 = 115
 
       // Tap add roommate button
       await tester.tap(find.byIcon(LucideIcons.plus));
       await tester.pump();
 
-      expect(find.text('₹77'), findsOneWidget); // 230 / 3 = 76.66 -> 77
+      expect(find.text('77 FCFA'), findsOneWidget); // 230 / 3 = 76.66 -> 77
     });
   });
 }

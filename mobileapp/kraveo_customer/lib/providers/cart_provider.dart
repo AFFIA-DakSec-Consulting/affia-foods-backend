@@ -227,12 +227,12 @@ class CartProvider with ChangeNotifier {
       if (subtotal < 100) {
         _appliedCouponCode = null;
         _couponDiscountAmount = 0.0;
-        _couponError = 'Minimum subtotal of ₹100 required for VITFIRST';
+        _couponError = 'Minimum subtotal of 100 FCFA required for VITFIRST';
         notifyListeners();
         return false;
       }
       _appliedCouponCode = 'VITFIRST';
-      // 20% off up to max ₹50
+      // 20% off up to max 50 FCFA
       _couponDiscountAmount = (subtotal * 0.20).clamp(0.0, 50.0);
       notifyListeners();
       return true;
@@ -240,7 +240,7 @@ class CartProvider with ChangeNotifier {
       if (subtotal < 150) {
         _appliedCouponCode = null;
         _couponDiscountAmount = 0.0;
-        _couponError = 'Minimum subtotal of ₹150 required for KRAVEO50';
+        _couponError = 'Minimum subtotal of 150 FCFA required for KRAVEO50';
         notifyListeners();
         return false;
       }

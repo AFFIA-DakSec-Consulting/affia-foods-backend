@@ -1,13 +1,12 @@
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, Bike, CheckCircle2, Crosshair, MapPin, PackageCheck, Radio, ShoppingBag, Timer, TriangleAlert, UserX, Users, Wallet } from 'lucide-react';
+import { ArrowRight, Bike, CheckCircle2, Crosshair, MapPin, PackageCheck, Radio, TriangleAlert, UserX } from 'lucide-react';
 import { DriverPartner, DriverPin, Order, OrderStatus, Vendor } from '../types';
 import { apiService } from '../services/api';
 import { DropPointInfo, FALLBACK_DROP_POINTS, LatLng, campusCenter } from '../lib/campus';
-import { averageDeliveryMinutes, isMapVendor, trackedRiders } from '../lib/dashboardStats';
+import { isMapVendor, trackedRiders } from '../lib/dashboardStats';
 import { RIDER_STATE_META, RIDER_STATE_ORDER, RiderMarkerState, countByState, riderMarkerState } from '../lib/riderMarkers';
 import type { MapRider, MapVendor } from './CampusMap';
 import { PIPELINE_ORDER, STATUS_META, inr, statusMeta, timeAgo } from '../lib/tokens';
-import { AnimatedNumber } from './ui/AnimatedNumber';
 import { PaymentPill, OtpLockedPill } from './ui/OrderBadges';
 import { ReassignHandler, RiderAssignSelect, shortId } from './OrderControls';
 import { GroupBadge } from './ui/GroupBadge';
@@ -15,10 +14,10 @@ import { preferRiderOrder, riderOrderLabel } from '../lib/orders';
 import { groupSearchTerms } from '../lib/orderGroups';
 import { Avatar } from './ui/Avatar';
 import { StatusPill } from './ui/StatusPill';
-import { changePercent, greeting, homeStats } from '../lib/homeStats';
+import { greeting } from '../lib/homeStats';
 import type { TabType } from '../lib/navigation';
 import { EmptyState } from './ui/EmptyState';
-import { KpiTile } from './ui/KpiTile';
+import { DeliveredByDay } from './PlatformOverview';
 import { Skeleton } from './ui/Skeleton';
 
 // Leaflet (~150 kB) loads only when the map tab is opened; the rest of the dashboard never pays for it.
@@ -54,6 +53,10 @@ interface LiveCommandCenterProps {
   adminName?: string;
   /** Jumps to another screen (shortcuts of the welcome banner and the to-do list). */
   onNavigate?: (tab: TabType) => void;
+  /** Platform-wide figures (server totals). Replaces the strip that only counted the orders loaded on this page. */
+  overview?: React.ReactNode;
+  /** Bumped when something new arrives, so the server-side blocks reload. */
+  refreshKey?: number;
 }
 
 const EMPTY_VENDORS: Vendor[] = [];
@@ -87,7 +90,7 @@ const orderMatches = (order: Order, query: string): boolean => {
     .some((value) => Boolean(value) && String(value).toLowerCase().includes(q));
 };
 
-export const LiveCommandCenter: React.FC<LiveCommandCenterProps> = ({ drivers, orders, driverPartners, vendors = EMPTY_VENDORS, onReassignDriver, onOpenOrder, loading = false, query = '', adminName, onNavigate }) => {
+export const LiveCommandCenter: React.FC<LiveCommandCenterProps> = ({ drivers, orders, driverPartners, vendors = EMPTY_VENDORS, onReassignDriver, onOpenOrder, loading = false, query = '', adminName, onNavigate, overview, refreshKey = 0 }) => {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 30_000);
@@ -103,7 +106,6 @@ export const LiveCommandCenter: React.FC<LiveCommandCenterProps> = ({ drivers, o
   const runnersOnline = driverPartners.filter((driver) => driver.dutyStatus === 'ONLINE' || driver.dutyStatus === 'IN_TRANSIT').length;
 
   // Average placed -> delivered over delivered orders in the feed: the same definition as the Analytics tab.
-  const avgDeliveryMinutes = useMemo(() => averageDeliveryMinutes(orders), [orders]);
 
   const activeByDriver = useMemo(() => {
     const map = new Map<string, Order>();
@@ -172,11 +174,6 @@ export const LiveCommandCenter: React.FC<LiveCommandCenterProps> = ({ drivers, o
 
   const unassignedCount = activeOrders.filter((order) => !order.driverId && order.paymentStatus === 'PAID').length;
   const lockedCount = activeOrders.filter((order) => order.otpLocked).length;
-  const stats = useMemo(() => homeStats(orders, now), [orders, now]);
-  const ordersDelta = changePercent(stats.today.orders, stats.yesterday.orders);
-  const revenueDelta = changePercent(stats.today.revenue, stats.yesterday.revenue);
-  const deltaNote = (delta: number | null, fallback: string) => (delta === null ? fallback : `${delta > 0 ? '+' : ''}${delta} % par rapport à hier`);
-  const weekMax = Math.max(1, ...stats.week.map((day) => day.orders));
   const firstName = adminName?.trim().split(/\s+/)[0];
 
   const [filter, setFilter] = useState<'all' | 'unassigned' | (typeof PIPELINE_ORDER)[number]>('all');
@@ -299,19 +296,7 @@ export const LiveCommandCenter: React.FC<LiveCommandCenterProps> = ({ drivers, o
         </div>
       </section>
 
-      {/* KPI strip: every number comes from the loaded feeds; "-" when a source has nothing to report */}
-      <section aria-label="Chiffres clés" className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-        <KpiTile index={0} loading={initialLoad} label="Commandes aujourd’hui" icon={ShoppingBag}
-          value={<AnimatedNumber value={stats.today.orders} />} note={deltaNote(ordersDelta, stats.yesterday.orders ? 'Comme hier' : 'Pas de commande hier')} />
-        <KpiTile index={1} loading={initialLoad} label="Ventes du jour" icon={Wallet} tone="text-kraveo-status-delivered" toneBg="bg-kraveo-status-delivered/15"
-          value={<AnimatedNumber value={stats.today.revenue} suffix=" FCFA" />} note={deltaNote(revenueDelta, 'Commandes payées uniquement')} />
-        <KpiTile index={2} loading={initialLoad} label="Livreurs en ligne" icon={Users} tone="text-kraveo-status-pickedUp" toneBg="bg-kraveo-status-pickedUp/15"
-          value={<AnimatedNumber value={driverPartners.length ? runnersOnline : null} />}
-          note={driverPartners.length ? `sur ${driverPartners.length} livreur${driverPartners.length > 1 ? 's' : ''} inscrit${driverPartners.length > 1 ? 's' : ''}` : 'Liste des livreurs indisponible'} />
-        <KpiTile index={3} loading={initialLoad} label="Délai moyen de livraison" icon={Timer} tone="text-kraveo-status-atGate" toneBg="bg-kraveo-status-atGate/15"
-          value={<AnimatedNumber value={avgDeliveryMinutes ? avgDeliveryMinutes.value : null} decimals={1} suffix={avgDeliveryMinutes ? ' min' : ''} />}
-          note={avgDeliveryMinutes ? `De la commande à la livraison, ${avgDeliveryMinutes.count} livrée${avgDeliveryMinutes.count === 1 ? '' : 's'}` : 'Aucune commande livrée pour l’instant'} />
-      </section>
+      {overview}
 
       {/* To do + week */}
       <section className="grid grid-cols-1 gap-4 lg:grid-cols-5 lg:gap-6" aria-label="À traiter et activité de la semaine">
@@ -343,27 +328,7 @@ export const LiveCommandCenter: React.FC<LiveCommandCenterProps> = ({ drivers, o
           {unpaidCount > 0 && <p className="mt-3 text-[11px] text-kraveo-ink3">{unpaidCount} commande{unpaidCount > 1 ? 's' : ''} en attente de paiement du client.</p>}
         </div>
 
-        <div className="k-card p-5 sm:p-6 lg:col-span-3">
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <div>
-              <h2 className="font-display text-base font-bold text-kraveo-ink">Commandes des 7 derniers jours</h2>
-              <p className="text-xs text-kraveo-ink3">Hors commandes annulées</p>
-            </div>
-            <span className="rounded-full bg-kraveo-surface2 px-3 py-1 text-xs font-bold tabular-nums text-kraveo-ink2">{stats.week.reduce((sum, day) => sum + day.orders, 0)} au total</span>
-          </div>
-          <div className="mt-6 flex h-44 items-end gap-2 sm:gap-4" role="img" aria-label="Nombre de commandes par jour sur les 7 derniers jours">
-            {stats.week.map((day, index) => {
-              const isToday = index === stats.week.length - 1;
-              return (
-                <div key={day.day} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-2">
-                  <span className="text-xs font-bold tabular-nums text-kraveo-ink2">{day.orders}</span>
-                  <div className={`w-full max-w-[44px] rounded-t-k-sm transition-all ${isToday ? 'bg-kraveo-yellow' : 'bg-kraveo-g500/80'}`} style={{ height: `${Math.max(4, (day.orders / weekMax) * 100)}%` }} />
-                  <span className={`text-[11px] capitalize ${isToday ? 'font-bold text-kraveo-ink' : 'text-kraveo-ink3'}`}>{isToday ? 'Auj.' : new Date(`${day.day}T00:00:00Z`).toLocaleDateString('fr-FR', { weekday: 'short', timeZone: 'UTC' }).replace('.', '')}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        <div className="lg:col-span-3"><DeliveredByDay refreshKey={refreshKey} /></div>
       </section>
 
       {/* Map + runners */}

@@ -115,11 +115,11 @@ class BillBreakdown extends StatelessWidget {
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Text('Bill details', style: KraveoType.titleMd.copyWith(color: k.ink)),
         const SizedBox(height: 12),
-        _Row('Items subtotal', rupee(subtotal)),
+        _Row('Items subtotal', fcfa(subtotal)),
         // One all-in line (older orders may still carry a separate packaging amount: it is folded in, never hidden).
-        _Row('Delivery & service fee', rupee(deliveryFee + taxAndPackaging)),
-        if (extraRestaurants > 0) _Row('Extra restaurant fee (x $extraRestaurants)', rupee(extraRestaurantFee)),
-        if (discount > 0) _Row(couponCode != null ? 'Coupon ($couponCode)' : 'Discount', '-${rupee(discount)}', discount: true),
+        _Row('Delivery & service fee', fcfa(deliveryFee + taxAndPackaging)),
+        if (extraRestaurants > 0) _Row('Extra restaurant fee (x $extraRestaurants)', fcfa(extraRestaurantFee)),
+        if (discount > 0) _Row(couponCode != null ? 'Coupon ($couponCode)' : 'Discount', '-${fcfa(discount)}', discount: true),
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 12),
           child: Divider(height: 1, color: k.line),
@@ -162,7 +162,7 @@ class BillBreakdown extends StatelessWidget {
             child: Row(children: [
               Icon(LucideIcons.sparkles, size: 16, color: k.brand),
               const SizedBox(width: 8),
-              Expanded(child: Text('You are saving ${rupee(discount)} on this order', style: KraveoType.bodySm.copyWith(color: k.brand, fontWeight: FontWeight.w700))),
+              Expanded(child: Text('You are saving ${fcfa(discount)} on this order', style: KraveoType.bodySm.copyWith(color: k.brand, fontWeight: FontWeight.w700))),
             ]),
           ),
         ],

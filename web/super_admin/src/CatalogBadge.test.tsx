@@ -29,6 +29,7 @@ describe('Catalog sidebar badge', () => {
     vi.spyOn(apiService, 'validateSession').mockResolvedValue({ id: 'a1', name: 'Admin', phone: '1', role: 'ADMIN' } as any);
     vi.spyOn(apiService, 'fetchOrderPage').mockResolvedValue({ orders: [], nextCursor: null });
     vi.spyOn(apiService, 'fetchVendors').mockResolvedValue([]);
+    vi.spyOn(apiService, 'fetchLiveCounts').mockResolvedValue({ inProgress: 0, awaitingRestaurant: 0, preparing: 0, readyForPickup: 0, onTheWay: 0, withoutRider: 0, stuck: 0, awaitingPayment: 0 });
     vi.spyOn(apiService, 'fetchDrivers').mockResolvedValue([]);
     vi.spyOn(apiService, 'fetchDriverLocations').mockResolvedValue([]);
     vi.spyOn(apiService, 'fetchNeedsAttention').mockResolvedValue({ available: true, entries: [] });

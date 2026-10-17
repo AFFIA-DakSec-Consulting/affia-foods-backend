@@ -17,13 +17,15 @@ dependencies:
   lucide_icons_flutter: ^3.1.20
   shared_preferences: ^2.2.2
   socket_io_client: ^2.0.3+1
-  razorpay_flutter: ^1.4.6
   google_sign_in: ^7.2.0
   firebase_core: ^4.15.0
   firebase_messaging: ^16.7.0
   flutter_local_notifications: ^22.3.1
   google_maps_flutter: ^2.18.1
   url_launcher: ^6.3.3
+  forui: ^0.21.3
+  geolocator: ^14.0.1
+  geocoding: ^5.0.0
 
 dev_dependencies:
   flutter_test:

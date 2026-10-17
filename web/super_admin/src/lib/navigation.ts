@@ -1,7 +1,7 @@
 import type React from 'react';
 import { ADMIN_SETTINGS_PAGES, AdminSettingsTab, RESTAURANT_SETTINGS_PAGES, RestaurantSettingsTab } from './settingsCatalog';
 import {
-  BadgePercent, Bell, Bike, BookOpen, Building2, ClipboardCheck, ClipboardList, Clock3, Gauge, Gift, History, Landmark, LayoutDashboard, LifeBuoy,
+  BadgePercent, Bell, Bike, Blocks, Globe2, Coins, FlaskConical, Ticket, BookOpen, Building2, ClipboardCheck, ClipboardList, Clock3, Gauge, Gift, History, Landmark, LayoutDashboard, LifeBuoy,
   Map as MapIcon, MapPinned, Megaphone, MessageSquareText, Percent, PieChart, ReceiptText, RotateCcw, SearchCheck, ShieldCheck, ShoppingBag,
   SlidersHorizontal, Star, Store, TrendingUp, TriangleAlert, UserCog, UserPlus, Users, UtensilsCrossed, Wallet, FileSignature,
 } from 'lucide-react';
@@ -24,9 +24,11 @@ export type AdminTab =
   // Finances
   | 'finance' | 'analytics' | 'refunds' | 'commissions'
   // Marketing
-  | 'promo-codes' | 'promo-offers' | 'referral' | 'notifications' | 'campaigns' | 'segments'
+  | 'promo-codes' | 'promo-offers' | 'referral' | 'notifications' | 'campaigns' | 'segments' | 'plans' | 'loyalty'
   // Croissance
-  | 'zones' | 'prospecting'
+  | 'zones' | 'service-areas' | 'prospecting'
+  // Plateforme
+  | 'modules' | 'simulator' | 'courier-bonuses'
   // Support
   | 'tickets' | 'help-center'
   // Administration
@@ -83,22 +85,22 @@ export const ADMIN_NAV: NavGroup[] = [
       { id: 'vendors', label: 'Restaurants', hint: 'Restaurants et disponibilité', icon: Store },
       { id: 'drivers', label: 'Livreurs', hint: 'Livreurs partenaires et service', icon: Bike },
       { id: 'catalog', label: 'Menus & plats', hint: 'Validez plats, prix et commission', icon: UtensilsCrossed },
-      { id: 'contracts', label: 'Contrats', hint: 'Contrats signés avec les restaurants et livreurs', icon: FileSignature, soon: true },
+      { id: 'contracts', label: 'Contrats', hint: 'Contrats avec les restaurants et les livreurs, et leurs versions', icon: FileSignature },
     ],
   },
   {
     label: 'Clients',
     items: [
       { id: 'customers', label: 'Clients', hint: 'Toutes les personnes qui ont commandé', icon: Users },
-      { id: 'reviews', label: 'Avis clients', hint: 'Notes des restaurants et livreurs, signalements', icon: Star, soon: true },
+      { id: 'reviews', label: 'Avis clients', hint: 'Notes des restaurants et livreurs, signalements', icon: Star },
     ],
   },
   {
     label: 'Finances',
     items: [
       { id: 'finance', label: 'Revenus & versements', hint: 'Revenus, règlements des restaurants et versements aux livreurs', icon: Landmark },
-      { id: 'refunds', label: 'Remboursements', hint: 'Remboursements clients, en cours et terminés', icon: ReceiptText, soon: true },
-      { id: 'commissions', label: 'Commissions', hint: 'Commissions par restaurant, plat et période', icon: Percent, soon: true },
+      { id: 'refunds', label: 'Remboursements', hint: 'Remboursements clients, en cours et terminés', icon: ReceiptText },
+      { id: 'commissions', label: 'Commissions', hint: 'Commissions par restaurant, plat et période', icon: Percent },
     ],
   },
   {
@@ -107,17 +109,19 @@ export const ADMIN_NAV: NavGroup[] = [
       {
         label: 'Promotions', hint: 'Codes promo et offres', icon: BadgePercent,
         children: [
-          { id: 'promo-codes', label: 'Codes promo', hint: 'Codes de réduction pour les clients', soon: true },
-          { id: 'promo-offers', label: 'Offres restaurants', hint: 'Réductions proposées par les restaurants', soon: true },
+          { id: 'promo-codes', label: 'Codes promo', hint: 'Codes de réduction, livraison offerte et offres de première commande' },
+          { id: 'promo-offers', label: 'Offres restaurants', hint: 'Réductions proposées par les restaurants' },
         ],
       },
-      { id: 'referral', label: 'Parrainage', hint: 'Parrainage des clients et des livreurs', icon: Gift, soon: true },
+      { id: 'plans', label: 'Abonnements', hint: 'Plans de livraison offerte vendus aux clients', icon: Ticket },
+      { id: 'loyalty', label: 'Fidélité', hint: 'Comment les clients gagnent des pièces Affia Foods', icon: Coins },
+      { id: 'referral', label: 'Parrainage', hint: 'Clients qui en invitent d’autres, récompenses et suivi', icon: Gift },
       {
         label: 'Communication', hint: 'Messages aux clients', icon: Megaphone,
         children: [
-          { id: 'notifications', label: 'Notifications', hint: 'Messages push et annonces aux clients', soon: true },
-          { id: 'campaigns', label: 'Campagnes', hint: 'Campagnes SMS, e-mail et WhatsApp', soon: true },
-          { id: 'segments', label: 'Segments clients', hint: 'Groupes de clients selon leurs habitudes', soon: true },
+          { id: 'notifications', label: 'Notifications', hint: 'Messages push et annonces aux clients' },
+          { id: 'campaigns', label: 'Campagnes', hint: 'Notifications push ciblées vers vos clients' },
+          { id: 'segments', label: 'Segments clients', hint: 'Groupes de clients calculés selon leurs habitudes de commande' },
         ],
       },
     ],
@@ -125,22 +129,31 @@ export const ADMIN_NAV: NavGroup[] = [
   {
     label: 'Expansion',
     items: [
-      { id: 'zones', label: 'Zones de livraison', hint: 'Villes ouvertes, zones et frais de livraison', icon: MapIcon, soon: true },
-      { id: 'prospecting', label: 'Restaurants à recruter', hint: 'Restaurants à convaincre et suivi des contacts', icon: SearchCheck, soon: true },
+      { id: 'service-areas', label: 'Zones de service', hint: 'Où l’application est disponible : tout le Sénégal ou seulement certaines zones', icon: Globe2 },
+      { id: 'zones', label: 'Zones de livraison', hint: 'Frais payés par le client et gain du livreur selon la distance', icon: MapIcon },
+      { id: 'prospecting', label: 'Restaurants à recruter', hint: 'Restaurants à convaincre et suivi des contacts', icon: SearchCheck },
+    ],
+  },
+  {
+    label: 'Plateforme',
+    items: [
+      { id: 'modules', label: 'Modules', hint: 'Activez ou coupez chaque fonctionnalité, et réglez ses paramètres', icon: Blocks },
+      { id: 'simulator', label: 'Simulateur de prix', hint: 'Testez le prix d’une commande fictive, sans rien enregistrer', icon: FlaskConical },
+      { id: 'courier-bonuses', label: 'Primes livreurs', hint: 'Primes de pluie, de nuit et d’heures de pointe', icon: Bike },
     ],
   },
   {
     label: 'Support',
     items: [
-      { id: 'tickets', label: 'Réclamations', hint: 'Litiges et demandes des clients, restaurants et livreurs', icon: LifeBuoy, soon: true },
-      { id: 'help-center', label: 'Centre d’aide', hint: 'Articles d’aide pour les clients, restaurants et livreurs', icon: BookOpen, soon: true },
+      { id: 'tickets', label: 'Réclamations', hint: 'Litiges et demandes des clients, restaurants et livreurs', icon: LifeBuoy },
+      { id: 'help-center', label: 'Centre d’aide', hint: 'Articles d’aide pour les clients, restaurants et livreurs', icon: BookOpen },
     ],
   },
   {
     label: 'Administration',
     items: [
-      { id: 'team', label: 'Équipe & accès', hint: 'Comptes administrateurs, rôles et permissions', icon: ShieldCheck, soon: true },
-      { id: 'audit', label: 'Journal d’activité', hint: 'Qui a fait quoi, et quand', icon: History, soon: true },
+      { id: 'team', label: 'Équipe & accès', hint: 'Comptes administrateurs, rôles et permissions', icon: ShieldCheck },
+      { id: 'audit', label: 'Journal d’activité', hint: 'Qui a fait quoi, et quand', icon: History },
       { id: 'settings', label: 'Paramètres', hint: 'Compte, frais, messages et réglages de la plateforme', icon: SlidersHorizontal, alsoActive: ['settings-fees', 'settings-account', ...ADMIN_SETTINGS_PAGES.map((p) => p.id)] },
     ],
   },
@@ -154,9 +167,9 @@ export const RESTAURANT_NAV: NavGroup[] = [
       {
         label: 'Commandes', hint: 'Suivi de vos commandes', icon: ClipboardList,
         children: [
-          { id: 'r-orders', label: 'En cours', hint: 'Acceptez, préparez et remettez les commandes', soon: true },
-          { id: 'r-history', label: 'Historique', hint: 'Toutes vos commandes passées', soon: true },
-          { id: 'r-returns', label: 'Retours & annulations', hint: 'Commandes annulées et demandes de remboursement', soon: true },
+          { id: 'r-orders', label: 'En cours', hint: 'Acceptez, préparez et remettez les commandes' },
+          { id: 'r-history', label: 'Historique', hint: 'Toutes vos commandes passées' },
+          { id: 'r-returns', label: 'Retours & annulations', hint: 'Commandes annulées et demandes de remboursement' },
         ],
       },
     ],
@@ -164,7 +177,7 @@ export const RESTAURANT_NAV: NavGroup[] = [
   {
     label: 'Mon restaurant',
     items: [
-      { id: 'r-menu', label: 'Menu & plats', hint: 'Plats, prix, photos et disponibilité', icon: UtensilsCrossed, soon: true },
+      { id: 'r-menu', label: 'Menu & plats', hint: 'Plats, prix, photos et disponibilité', icon: UtensilsCrossed },
       { id: 'r-hours', label: 'Horaires & ouverture', hint: 'Horaires d’ouverture et fermeture temporaire', icon: Clock3 },
       { id: 'r-profile', label: 'Profil du restaurant', hint: 'Logo, photo, description, contact et position', icon: Building2 },
     ],
@@ -172,10 +185,10 @@ export const RESTAURANT_NAV: NavGroup[] = [
   {
     label: 'Ventes',
     items: [
-      { id: 'r-payouts', label: 'Paiements', hint: 'Règlements reçus et à venir', icon: Wallet, soon: true },
-      { id: 'r-stats', label: 'Statistiques', hint: 'Ventes, plats populaires et heures de pointe', icon: PieChart, soon: true },
-      { id: 'r-promotions', label: 'Promotions', hint: 'Offres et réductions sur vos plats', icon: BadgePercent, soon: true },
-      { id: 'r-reviews', label: 'Avis clients', hint: 'Notes et commentaires de vos clients', icon: MessageSquareText, soon: true },
+      { id: 'r-payouts', label: 'Paiements', hint: 'Règlements reçus et à venir', icon: Wallet },
+      { id: 'r-stats', label: 'Statistiques', hint: 'Ventes, plats populaires et heures de pointe', icon: PieChart },
+      { id: 'r-promotions', label: 'Promotions', hint: 'Offres et réductions sur vos plats', icon: BadgePercent },
+      { id: 'r-reviews', label: 'Avis clients', hint: 'Notes et commentaires de vos clients', icon: MessageSquareText },
     ],
   },
   {
@@ -193,13 +206,16 @@ export const DEFAULT_TAB: Record<Workspace, TabType> = { admin: 'map', restauran
 
 export interface FlatNav { id: TabType; label: string; hint: string; soon?: boolean; parent?: string }
 
+/** Settings pages that have a real screen (the others open the "Bientôt" page). */
+const BUILT_SETTINGS = new Set<string>(['settings-orders', 'settings-payments', 'settings-export', 'settings-security']);
+
 /** Screens that are not menu entries: sub-pages of the settings hub. */
 const SUB_PAGES: FlatNav[] = [
   { id: 'settings-fees', label: 'Frais & commission', hint: 'Frais, commission, arrondi et règlements', parent: 'Paramètres' },
   { id: 'settings-account', label: 'Mon compte', hint: 'Votre profil et votre session', parent: 'Paramètres' },
   { id: 'templates', label: 'Modèles de messages', hint: 'SMS, e-mails et notifications envoyés automatiquement', soon: true, parent: 'Paramètres' },
-  { id: 'legal', label: 'Documents légaux', hint: 'Conditions d’utilisation et confidentialité', soon: true, parent: 'Paramètres' },
-  ...ADMIN_SETTINGS_PAGES.map((p): FlatNav => ({ id: p.id, label: p.title, hint: p.description, soon: true, parent: 'Paramètres' })),
+  { id: 'legal', label: 'Documents légaux', hint: 'Conditions d’utilisation et confidentialité', parent: 'Paramètres' },
+  ...ADMIN_SETTINGS_PAGES.map((p): FlatNav => ({ id: p.id, label: p.title, hint: p.description, soon: !BUILT_SETTINGS.has(p.id), parent: 'Paramètres' })),
   ...RESTAURANT_SETTINGS_PAGES.map((p): FlatNav => ({ id: p.id, label: p.title, hint: p.description, soon: true, parent: 'Paramètres' })),
 ];
 
@@ -223,7 +239,8 @@ const PATH_BY_TAB: Partial<Record<TabType, string>> = {
   applications: 'inscriptions', vendors: 'restaurants', drivers: 'livreurs', catalog: 'menus', contracts: 'contrats',
   customers: 'clients', reviews: 'avis', finance: 'finances', refunds: 'remboursements', commissions: 'commissions',
   'promo-codes': 'codes-promo', 'promo-offers': 'offres', referral: 'parrainage', notifications: 'notifications', campaigns: 'campagnes', segments: 'segments',
-  zones: 'zones', prospecting: 'prospection', tickets: 'reclamations', 'help-center': 'aide',
+  zones: 'zones', 'service-areas': 'zones-de-service', prospecting: 'prospection', tickets: 'reclamations', 'help-center': 'aide',
+  plans: 'abonnements', loyalty: 'fidelite', modules: 'modules', simulator: 'simulateur', 'courier-bonuses': 'primes-livreurs',
   team: 'equipe', audit: 'journal', settings: 'parametres', 'settings-fees': 'parametres/frais', 'settings-account': 'parametres/compte', templates: 'modeles', legal: 'documents-legaux',
 };
 

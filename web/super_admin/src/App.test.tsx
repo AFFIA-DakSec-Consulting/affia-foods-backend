@@ -47,6 +47,7 @@ const mockApi = () => {
   vi.spyOn(apiService, 'validateSession').mockResolvedValue({ id: 'a1', name: 'Admin', phone: '1', role: 'ADMIN' } as any);
   const fetchOrderPage = vi.spyOn(apiService, 'fetchOrderPage').mockResolvedValue({ orders: [paidOrder], nextCursor: null });
   const fetchVendors = vi.spyOn(apiService, 'fetchVendors').mockResolvedValue([]);
+  vi.spyOn(apiService, 'fetchLiveCounts').mockResolvedValue({ inProgress: 0, awaitingRestaurant: 0, preparing: 0, readyForPickup: 0, onTheWay: 0, withoutRider: 0, stuck: 0, awaitingPayment: 0 });
   const fetchDrivers = vi.spyOn(apiService, 'fetchDrivers').mockResolvedValue([rider]);
   vi.spyOn(apiService, 'fetchDriverLocations').mockResolvedValue([]);
   vi.spyOn(apiService, 'fetchNeedsAttention').mockResolvedValue({ available: true, entries: [] });

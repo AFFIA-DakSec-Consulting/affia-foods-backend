@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../models/order.dart';
+import '../models/payment_method.dart';
 import '../models/order_group.dart';
 import '../services/customer_api_service.dart';
 import '../services/order_api.dart';
@@ -743,10 +744,42 @@ class OrderProvider with ChangeNotifier {
   /// Starts (or retries) payment for an existing order: `create-order` -> Razorpay ->
   /// `verify-signature`. Always the same order; never creates a new one. Calls for an order that
   /// is already being paid return the in-flight attempt.
-  Future<PaymentOutcome> payForOrder(String orderId, {String? contact}) {
+  // ---- payment methods (Wave, Orange Money, cash) ---------------------------------------------
+
+  PaymentMethodsInfo? _paymentMethods;
+  Future<void>? _methodsLoading;
+
+  /// The server's payment methods, or the built-in defaults until they are loaded.
+  List<PaymentMethod> get paymentMethods => _paymentMethods?.methods ?? PaymentMethod.defaults;
+
+  /// True when the server simulates payments (nobody is charged). Null until known.
+  bool? get paymentsSimulated => _paymentMethods?.simulated;
+
+  /// `GET /payments/methods`, once per session (concurrent calls share the request). A failure
+  /// keeps the defaults so checkout still works.
+  Future<void> loadPaymentMethods() => _methodsLoading ??= () async {
+        final gen = _generation;
+        final r = await _api.fetchPaymentMethods();
+        if (gen != _generation) {
+          _methodsLoading = null;
+          return;
+        }
+        if (r.value != null) {
+          _paymentMethods = r.value;
+          _notify();
+        } else {
+          _methodsLoading = null; // try again next time
+        }
+      }();
+
+  /// Pays [orderId]. With a [method] (`WAVE`, `ORANGE_MONEY`, `CASH`) the server takes the
+  /// payment itself (`POST /payments/simulate` while payments are simulated). Without one, the
+  /// external [PaymentGateway] flow runs (create, open the provider, verify on the server): kept
+  /// for the real Wave / Orange Money integration.
+  Future<PaymentOutcome> payForOrder(String orderId, {String? contact, String? method}) {
     final inFlight = _paying[orderId];
     if (inFlight != null) return inFlight;
-    final f = _pay(orderId, contact).whenComplete(() {
+    final f = (method != null ? _payWithMethod(orderId, method) : _pay(orderId, contact)).whenComplete(() {
       _paying.remove(orderId);
       _notify();
     });
@@ -789,9 +822,15 @@ class OrderProvider with ChangeNotifier {
       }
     }
 
+    final gateway = _gateway;
+    if (gateway == null) {
+      // No external payment provider is wired in the app (Razorpay was removed): checkout pays
+      // with a method instead (see [payForOrder]).
+      return const PaymentOutcome(PaymentOutcomeKind.failed, message: 'Choisissez Wave, Orange Money ou les espèces pour payer.');
+    }
     final GatewayResult g;
     try {
-      g = await (_gateway ??= RazorpayPaymentGateway()).pay(session.value!, contact: contact).timeout(paymentSheetTimeout);
+      g = await gateway.pay(session.value!, contact: contact).timeout(paymentSheetTimeout);
     } on TimeoutException {
       unawaited(refreshOrder(orderId));
       return const PaymentOutcome(PaymentOutcomeKind.failed, message: 'The payment window did not answer. If money was debited, it will show up on this order shortly; otherwise try again.');
@@ -849,6 +888,43 @@ class OrderProvider with ChangeNotifier {
     // Razorpay took the payment but the server has not confirmed it (network, or a signature
     // problem the webhook may still resolve). Show "confirming" and never offer to pay again.
     return PaymentOutcome(PaymentOutcomeKind.confirming, order: latest, message: 'Payment received. We\'re confirming it with Kraveo; this can take a minute.');
+  }
+
+  Future<PaymentOutcome> _payWithMethod(String orderId, String method) async {
+    final gen = _generation;
+    final r = await _api.simulatePayment(orderId, method);
+    if (gen != _generation) return const PaymentOutcome(PaymentOutcomeKind.failed);
+    final ok = r.value;
+    if (ok != null) {
+      if (ok.order != null) _ingest(ok.order!);
+      if (ok.pendingConfirmation) {
+        _paymentSubmittedAt[orderId] = _clock();
+        unawaited(refreshOrder(orderId));
+        return PaymentOutcome(PaymentOutcomeKind.confirming, order: _view(orderId), message: 'Paiement reçu. Confirmation en cours, cela peut prendre une minute.');
+      }
+      final latest = _view(orderId);
+      if (latest != null && !latest.isPaid) unawaited(refreshOrder(orderId));
+      return PaymentOutcome(PaymentOutcomeKind.paid, order: latest);
+    }
+    final error = r.error!;
+    if (error.order != null) _ingest(error.order!);
+    if (error.code == 'ORDER_CANCELLED' || error.code == 'PAYMENT_WINDOW_EXPIRED' || error.code == 'ORDER_CLOSED') {
+      if (_attempt?.orderId == orderId) _attempt = null;
+      unawaited(refreshOrder(orderId));
+      return PaymentOutcome(PaymentOutcomeKind.orderClosed, order: _view(orderId), message: orderErrorMessage(error));
+    }
+    if (error.kind == OrderErrorKind.notFound && error.order == null) {
+      // The server does not simulate payments and no real Wave / Orange Money integration exists yet.
+      return const PaymentOutcome(PaymentOutcomeKind.failed, message: 'Le paiement en ligne n\'est pas encore disponible sur ce serveur.');
+    }
+    if (!error.isNetwork && error.kind != OrderErrorKind.server && error.kind != OrderErrorKind.unauthorized) {
+      // Refused: maybe it was paid meanwhile or it expired. Ask the server.
+      final fresh = await refreshOrder(orderId);
+      if (gen != _generation) return const PaymentOutcome(PaymentOutcomeKind.failed);
+      if (fresh != null && fresh.isPaid) return PaymentOutcome(PaymentOutcomeKind.paid, order: fresh);
+      if (fresh != null && fresh.isTerminal) return PaymentOutcome(PaymentOutcomeKind.orderClosed, order: fresh, message: _closedMessage(fresh));
+    }
+    return PaymentOutcome(PaymentOutcomeKind.failed, message: orderErrorMessage(error, action: 'pay'));
   }
 
   static String _closedMessage(OrderModel o) => o.isPaymentNotCompletedCancel

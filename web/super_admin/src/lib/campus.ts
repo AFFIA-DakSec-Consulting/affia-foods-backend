@@ -44,7 +44,6 @@ export const campusCenter = (points: DropPointInfo[] = FALLBACK_DROP_POINTS): La
   return { lat: pins.reduce((s, p) => s + p.lat, 0) / pins.length, lng: pins.reduce((s, p) => s + p.lng, 0) / pins.length };
 };
 
-export const NEAR_CAMPUS_KM = 3;
 /** The pin every restaurant has until an admin sets a real one. */
 export const PLACEHOLDER_PIN: LatLng = { lat: 23.0768, lng: 76.8524 };
 
@@ -54,8 +53,10 @@ export const distanceKm = (a: LatLng, b: LatLng): number => {
   return 2 * 6371.0088 * Math.asin(Math.min(1, Math.sqrt(h)));
 };
 
-export const isNearCampus = (lat: number, lng: number, center: LatLng = campusCenter()): boolean =>
-  Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && distanceKm(center, { lat, lng }) <= NEAR_CAMPUS_KM;
+/** The box of Senegal (same numbers as the server). Only used to spot swapped coordinates: the server decides what is served. */
+export const SENEGAL_BOUNDS = { minLat: 12.2, maxLat: 16.8, minLng: -17.7, maxLng: -11.3 } as const;
+export const isInSenegal = (lat: number, lng: number): boolean =>
+  Number.isFinite(lat) && Number.isFinite(lng) && lat >= SENEGAL_BOUNDS.minLat && lat <= SENEGAL_BOUNDS.maxLat && lng >= SENEGAL_BOUNDS.minLng && lng <= SENEGAL_BOUNDS.maxLng;
 
 /** A restaurant has a real pin when the server says so, or (older server) when it is a finite pin that is not the placeholder. */
 export const vendorHasRealPin = (v: { lat?: number | null; lng?: number | null; hasLocation?: boolean }): boolean => {
@@ -118,7 +119,7 @@ const readComponents = (text: string): Comp[] | { err: string } => {
  * "23.0745 76.8590", degrees-minutes-seconds like 23°04'53.4"N 76°50'35.0"E, or a maps link containing `@lat,lng`, `!3dlat!4dlng` or `?q=lat,lng`. Checks ranges and that the
  * point is on campus, with a message that says what to fix. The server validates again.
  */
-export const parseLocationInput = (raw: string, center: LatLng = campusCenter()): LocationParse => {
+export const parseLocationInput = (raw: string, _center: LatLng = campusCenter()): LocationParse => {
   const text = raw.trim().replace(/ /g, ' ');
   if (!text) return { ok: false, message: 'Collez les coordonnées depuis Google Maps, par exemple 23.0745, 76.8590.' };
   // Plain decimals, "@lat,lng", "!3d..!4d.." and "?q=lat,lng" first (below); everything with degree symbols or N/S/E/W letters here.
@@ -135,7 +136,7 @@ export const parseLocationInput = (raw: string, center: LatLng = campusCenter())
     const lat = round6(aIsLat ? a.value : b.value);
     const lng = round6(aIsLat ? b.value : a.value);
     if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return { ok: false, message: 'Ces degrés sont hors limites. Vérifiez les chiffres.' };
-    if (!isNearCampus(lat, lng, center)) return { ok: false, message: farMessage(lat, lng, center) };
+    if (looksSwapped(lat, lng)) return { ok: false, message: swappedMessage(lat, lng) };
     return { ok: true, lat, lng };
   }
   const m = PAIR.exec(text) ?? BANG.exec(text) ?? AT.exec(text) ?? QUERY.exec(text);
@@ -145,14 +146,12 @@ export const parseLocationInput = (raw: string, center: LatLng = campusCenter())
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return { ok: false, message: `Lecture impossible. ${FORMAT_HELP}` };
   if (Math.abs(lat) > 90) return { ok: false, message: 'La latitude doit être comprise entre -90 et 90. Avez-vous inversé les deux nombres ?' };
   if (Math.abs(lng) > 180) return { ok: false, message: 'La longitude doit être comprise entre -180 et 180.' };
-  if (!isNearCampus(lat, lng, center)) return { ok: false, message: farMessage(lat, lng, center) };
+  if (looksSwapped(lat, lng)) return { ok: false, message: swappedMessage(lat, lng) };
   return { ok: true, lat, lng };
 };
 
-/** The 'too far' message; says so when the two numbers look swapped (a very common slip). */
-const farMessage = (lat: number, lng: number, center: LatLng): string =>
-  Math.abs(lng) <= 90 && isNearCampus(lng, lat, center)
-    ? `La latitude et la longitude semblent inversées. La latitude (nord) vient en premier : ${formatLatLng(lng, lat)}.`
-    : `Ce point est à plus de ${NEAR_CAMPUS_KM} km du campus. Vérifiez les chiffres (latitude en premier).`;
+/** The two numbers are probably the wrong way round (a very common slip): swapped, they would be a point in Senegal and as typed they are not. */
+const looksSwapped = (lat: number, lng: number): boolean => !isInSenegal(lat, lng) && Math.abs(lng) <= 90 && isInSenegal(lng, lat);
+const swappedMessage = (lat: number, lng: number): string => `La latitude et la longitude semblent inversées. La latitude (nord) vient en premier : ${formatLatLng(lng, lat)}.`;
 
 export const formatLatLng = (lat: number, lng: number): string => `${lat.toFixed(5)}, ${lng.toFixed(5)}`;

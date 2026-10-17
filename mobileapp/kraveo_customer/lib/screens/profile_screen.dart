@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:kraveo_ui/kraveo_ui.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
+import '../widgets/ui/k_icon_button.dart';
 import '../config/app_info.dart';
 import '../models/auth_results.dart';
 import '../models/customer_user.dart';
@@ -93,8 +94,15 @@ class ProfileScreen extends StatelessWidget {
       backgroundColor: k.bg,
       appBar: AppBar(
         automaticallyImplyLeading: false,
+        leading: Navigator.of(context).canPop()
+            ? Padding(
+                padding: const EdgeInsets.only(left: 20),
+                child: Center(child: KIconButton(icon: LucideIcons.arrowLeft, semanticLabel: 'Back', onTap: () => Navigator.of(context).maybePop())),
+              )
+            : null,
+        leadingWidth: Navigator.of(context).canPop() ? 68 : null,
         toolbarHeight: 68,
-        titleSpacing: KSpace.gutter,
+        titleSpacing: Navigator.of(context).canPop() ? 0 : KSpace.gutter,
         title: const Text('Me'),
       ),
       body: user == null
@@ -148,6 +156,36 @@ class ProfileScreen extends StatelessWidget {
                 ),
                 const _SectionLabel('ORDERS'),
                 KReveal(index: 3, child: _OrdersCard(orders: orders, onOpen: onOpenOrders, onTrack: onTrackOrder)),
+                // Direct entries to the order pages: live tracking and the order history.
+                if (onTrackOrder != null || onOpenOrders != null) ...[
+                  const SizedBox(height: 12),
+                  KReveal(
+                    index: 3,
+                    child: KCard(
+                      padding: EdgeInsets.zero,
+                      child: Column(children: [
+                        if (onTrackOrder != null)
+                          _SettingsRow(
+                            icon: LucideIcons.mapPinned,
+                            title: 'Suivi en direct',
+                            subtitle: orders.activeOrder != null && orders.activeOrder!.status.isLive
+                                ? '${orders.activeOrder!.title} · ${orderHeadline(orders.activeOrder!)}'
+                                : 'Aucune commande en cours',
+                            onTap: onTrackOrder!,
+                          ),
+                        if (onTrackOrder != null && onOpenOrders != null)
+                          Divider(height: 1, indent: 72, endIndent: 16, color: k.line.withValues(alpha: 0.7)),
+                        if (onOpenOrders != null)
+                          _SettingsRow(
+                            icon: LucideIcons.history,
+                            title: 'Historique des commandes',
+                            subtitle: 'Vos commandes passées, reçus et avis',
+                            onTap: onOpenOrders!,
+                          ),
+                      ]),
+                    ),
+                  ),
+                ],
                 const _SectionLabel('HELP'),
                 KReveal(
                   index: 4,
@@ -484,7 +522,7 @@ class _OrdersCard extends StatelessWidget {
             Expanded(child: _Stat(value: '${delivered.length}$more', label: delivered.length == 1 ? 'Order delivered' : 'Orders delivered')),
             Container(width: 1, height: 36, color: k.line),
             const SizedBox(width: 16),
-            Expanded(child: _Stat(value: '${rupee(spent)}$more', label: 'Spent so far')),
+            Expanded(child: _Stat(value: '${fcfa(spent)}$more', label: 'Spent so far')),
           ]),
         if (live) ...[
           const SizedBox(height: 14),

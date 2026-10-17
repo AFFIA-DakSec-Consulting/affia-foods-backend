@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:customer_app/models/order.dart';
+import 'package:customer_app/models/payment_method.dart';
 import 'package:customer_app/models/order_group.dart';
 import 'package:customer_app/providers/order_provider.dart';
 import 'package:customer_app/services/order_api.dart';
@@ -252,6 +253,11 @@ class FakeOrderApi implements OrderApi {
   Future<OrderResult<OrderGroupView>> Function(CreateGroupRequest r)? onCreateGroup;
   Future<OrderResult<OrderGroupView>> Function(String id)? onFetchGroup;
   Future<OrderResult<OrderQuote>> Function(QuoteRequest r)? onQuote;
+  Future<OrderResult<PaymentMethodsInfo>> Function()? onMethods;
+  Future<OrderResult<SimulatedPayment>> Function(String orderId, String method)? onSimulate;
+
+  /// `POST /payments/simulate` calls: (orderId, method).
+  final List<(String, String)> simulations = [];
 
   /// Server-side groups by idempotency key / by id (default createGroup / fetchGroup).
   final Map<String, OrderGroupView> groupByKey = {};
@@ -343,6 +349,22 @@ class FakeOrderApi implements OrderApi {
     verifies.add(proof);
     if (onVerify != null) return onVerify!(proof);
     return const OrderResult.ok(null);
+  }
+
+  @override
+  Future<OrderResult<PaymentMethodsInfo>> fetchPaymentMethods() async {
+    if (onMethods != null) return onMethods!();
+    return const OrderResult.ok(PaymentMethodsInfo(methods: PaymentMethod.defaults, simulated: true));
+  }
+
+  /// Default: the server marks the order paid at once (simulated payments).
+  @override
+  Future<OrderResult<SimulatedPayment>> simulatePayment(String orderId, String method) async {
+    simulations.add((orderId, method));
+    if (onSimulate != null) return onSimulate!(orderId, method);
+    final paid = orderModel(id: orderId, paymentStatus: 'PAID', totalAmount: server[orderId]?.totalAmount);
+    server[orderId] = paid;
+    return OrderResult.ok(SimulatedPayment(order: paid));
   }
 
   @override

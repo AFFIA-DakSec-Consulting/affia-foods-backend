@@ -14,7 +14,6 @@ import 'package:customer_app/screens/order_history_screen.dart';
 import 'package:customer_app/services/customer_api_service.dart';
 import 'package:customer_app/services/google_auth_service.dart';
 import 'package:customer_app/services/order_api.dart';
-import 'package:customer_app/services/payment_gateway.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -115,40 +114,34 @@ void main() {
   setUp(() => FakeRealtime.created.clear());
 
   group('Checkout', () {
-    testWidgets('server total differs: shown before paying; cancelled payment offers retry on the SAME order; success opens tracking', (tester) async {
-      final api = FakeOrderApi();
-      final gateway = FakeGateway()..next = const GatewayResult.cancelled();
-      final orders = fakeOrders(api, gateway: gateway);
+    testWidgets('server total differs: shown before paying; a failed payment offers retry on the SAME order; success opens tracking', (tester) async {
+      final api = FakeOrderApi()..onSimulate = (id, m) async => const OrderResult.fail(OrderApiError(OrderErrorKind.offline));
+      final orders = fakeOrders(api);
       final cart = cartWithThali();
       await pumpApp(tester, const CheckoutScreen(selectedHostel: 'Block 2'), orders: orders, cart: cart);
 
       expect(find.textContaining('Estimate'), findsNothing, reason: 'below the fold until scrolled');
-      await tapButton(tester, 'Pay ₹145');
+      await tapButton(tester, 'Pay 145 FCFA');
       expect(api.creates, hasLength(1));
-      expect(gateway.opened, isEmpty, reason: 'server total (₹245) differs from the estimate: show it first');
-      expect(find.text('Updated total: ₹245'), findsOneWidget);
-      expect(button('Pay ₹245'), findsOneWidget);
+      expect(api.simulations, isEmpty, reason: 'server total (245 FCFA) differs from the estimate: show it first');
+      expect(find.text('Updated total: 245 FCFA'), findsOneWidget);
+      expect(button('Pay 245 FCFA'), findsOneWidget);
       expect(find.textContaining('Pay by'), findsOneWidget);
 
-      await tapButton(tester, 'Pay ₹245');
-      expect(gateway.opened, hasLength(1));
-      expect(gateway.opened.single.amountPaise, 24500);
+      await tapButton(tester, 'Pay 245 FCFA');
+      expect(api.simulations, hasLength(1));
+      expect(api.simulations.single.$2, 'WAVE', reason: 'Wave is the default method');
       expect(find.text('Payment not completed'), findsOneWidget);
-      expect(button('Try payment again · ₹245'), findsOneWidget);
+      expect(button('Try payment again · 245 FCFA'), findsOneWidget);
       expect(button('Cancel order'), findsOneWidget);
       expect(tester.takeException(), isNull);
 
-      // Retry: same order, no second POST.
-      gateway.next = const GatewayResult.success(PaymentProof(razorpayOrderId: 'r', razorpayPaymentId: 'p', razorpaySignature: 's'));
-      api.onVerify = (p) async {
-        final id = api.creates.length == 1 ? api.server.keys.single : '';
-        api.server[id] = orderModel(id: id, paymentStatus: 'PAID', updatedAt: DateTime.now().toUtc().add(const Duration(seconds: 5)));
-        return const OrderResult.ok(null);
-      };
-      await tapButton(tester, 'Try payment again · ₹245');
+      // Retry: same order, no second POST; the server takes the payment.
+      api.onSimulate = null;
+      await tapButton(tester, 'Try payment again · 245 FCFA');
       expect(api.creates, hasLength(1));
-      expect(api.paymentStarts, hasLength(2));
-      expect(api.paymentStarts.toSet(), hasLength(1));
+      expect(api.simulations, hasLength(2));
+      expect(api.simulations.map((e) => e.$1).toSet(), hasLength(1));
       // A short success screen comes first, then it hands over to tracking by itself.
       expect(find.byType(PaymentSuccessScreen), findsOneWidget);
       expect(find.text('Payment successful'), findsOneWidget);
@@ -162,32 +155,65 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('same total: payment opens straight away', (tester) async {
+    testWidgets('same total: pays straight away with the chosen method (Wave by default)', (tester) async {
       final api = FakeOrderApi();
       api.onCreate = (r) async {
         final o = orderModel(id: 'same', totalAmount: 145);
         api.server[o.id] = o;
         return OrderResult.ok(o);
       };
-      final gateway = FakeGateway()..next = const GatewayResult.cancelled();
-      final orders = fakeOrders(api, gateway: gateway);
+      final orders = fakeOrders(api);
       await pumpApp(tester, const CheckoutScreen(selectedHostel: 'Block 2'), orders: orders, cart: cartWithThali());
-      await tapButton(tester, 'Pay ₹145');
-      expect(gateway.opened, hasLength(1));
-      expect(button('Try payment again · ₹145'), findsOneWidget);
+      await tapButton(tester, 'Pay 145 FCFA');
+      expect(api.simulations, [('same', 'WAVE')]);
+      expect(find.byType(PaymentSuccessScreen), findsOneWidget);
+    });
+
+    testWidgets('the three methods are listed; Orange Money and cash are sent as chosen', (tester) async {
+      final api = FakeOrderApi();
+      api.onCreate = (r) async {
+        final o = orderModel(id: 'om', totalAmount: 145);
+        api.server[o.id] = o;
+        return OrderResult.ok(o);
+      };
+      await pumpApp(tester, const CheckoutScreen(selectedHostel: 'Block 2'), orders: fakeOrders(api), cart: cartWithThali());
+      for (final name in ['Wave', 'Orange Money', 'Espèces']) {
+        await tester.scrollUntilVisible(find.text(name), 200, scrollable: find.byType(Scrollable).first);
+        expect(find.text(name), findsOneWidget, reason: name);
+      }
+      expect(find.textContaining('Mode test'), findsOneWidget, reason: 'the fake server simulates payments');
+      // The tile can sit under the pinned Pay footer on a small screen: press it directly.
+      tester.widget<KPressable>(find.ancestor(of: find.text('Orange Money'), matching: find.byType(KPressable)).first).onTap!();
+      await settle(tester);
+      await tapButton(tester, 'Pay 145 FCFA');
+      expect(api.simulations, [('om', 'ORANGE_MONEY')]);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a server without simulated payments says online payment is not available yet', (tester) async {
+      final api = FakeOrderApi()..onSimulate = (id, m) async => const OrderResult.fail(OrderApiError(OrderErrorKind.notFound, statusCode: 404));
+      api.onCreate = (r) async {
+        final o = orderModel(id: 'nf', totalAmount: 145);
+        api.server[o.id] = o;
+        return OrderResult.ok(o);
+      };
+      await pumpApp(tester, const CheckoutScreen(selectedHostel: 'Block 2'), orders: fakeOrders(api), cart: cartWithThali());
+      await tapButton(tester, 'Pay 145 FCFA');
+      expect(find.textContaining('pas encore disponible'), findsWidgets);
+      expect(find.byType(PaymentSuccessScreen), findsNothing);
     });
 
     testWidgets('server refusals and offline show clear messages and never a stuck spinner', (tester) async {
       final api = FakeOrderApi()..onCreate = (r) async => const OrderResult.fail(OrderApiError(OrderErrorKind.rateLimited, statusCode: 429, message: 'You already have 3 unpaid orders.'));
       final orders = fakeOrders(api);
       await pumpApp(tester, const CheckoutScreen(selectedHostel: 'Block 2'), orders: orders, cart: cartWithThali());
-      await tapButton(tester, 'Pay ₹145');
+      await tapButton(tester, 'Pay 145 FCFA');
       expect(find.text('You already have 3 unpaid orders.'), findsWidgets);
-      expect(tester.widget<KButton>(button('Pay ₹145')).loading, isFalse);
-      expect(tester.widget<KButton>(button('Pay ₹145')).onPressed, isNotNull);
+      expect(tester.widget<KButton>(button('Pay 145 FCFA')).loading, isFalse);
+      expect(tester.widget<KButton>(button('Pay 145 FCFA')).onPressed, isNotNull);
 
       api.onCreate = (r) async => const OrderResult.fail(OrderApiError(OrderErrorKind.offline));
-      await tapButton(tester, 'Pay ₹145');
+      await tapButton(tester, 'Pay 145 FCFA');
       expect(find.textContaining('No internet connection'), findsWidgets);
       expect(find.textContaining('won\'t get a duplicate order'), findsWidgets);
       expect(api.creates[0].clientRequestId, api.creates[1].clientRequestId);
@@ -195,15 +221,15 @@ void main() {
     });
 
     testWidgets('payment window expired on the server: back to the cart, next tap places a new order', (tester) async {
-      final api = FakeOrderApi()..onCreatePayment = (id) async => const OrderResult.fail(OrderApiError(OrderErrorKind.conflict, statusCode: 409, code: 'PAYMENT_WINDOW_EXPIRED'));
+      final api = FakeOrderApi()..onSimulate = (id, m) async => const OrderResult.fail(OrderApiError(OrderErrorKind.conflict, statusCode: 409, code: 'PAYMENT_WINDOW_EXPIRED'));
       final orders = fakeOrders(api);
       await pumpApp(tester, const CheckoutScreen(selectedHostel: 'Block 2'), orders: orders, cart: cartWithThali());
-      await tapButton(tester, 'Pay ₹145');
-      await tapButton(tester, 'Pay ₹245');
+      await tapButton(tester, 'Pay 145 FCFA');
+      await tapButton(tester, 'Pay 245 FCFA');
       expect(find.textContaining('15 minutes to pay'), findsWidgets);
-      expect(button('Pay ₹145'), findsOneWidget);
-      api.onCreatePayment = null;
-      await tapButton(tester, 'Pay ₹145');
+      expect(button('Pay 145 FCFA'), findsOneWidget);
+      api.onSimulate = null;
+      await tapButton(tester, 'Pay 145 FCFA');
       expect(api.creates, hasLength(2));
       expect(api.creates[1].clientRequestId, isNot(api.creates[0].clientRequestId));
       expect(tester.takeException(), isNull);
@@ -212,7 +238,7 @@ void main() {
     testWidgets('a kitchen that is not in the live catalog cannot be ordered from', (tester) async {
       final api = FakeOrderApi();
       await pumpApp(tester, const CheckoutScreen(selectedHostel: 'Block 2'), orders: fakeOrders(api), cart: cartWithThali(), dhabas: DhabaProvider());
-      await tapButton(tester, 'Pay ₹145');
+      await tapButton(tester, 'Pay 145 FCFA');
       expect(api.creates, isEmpty);
       expect(find.textContaining('live menu'), findsWidgets);
     });
@@ -229,14 +255,14 @@ void main() {
       );
       await tester.tap(find.text('open'));
       await settle(tester);
-      await tapButton(tester, 'Pay ₹145');
-      expect(find.text('Updated total: ₹245'), findsOneWidget);
+      await tapButton(tester, 'Pay 145 FCFA');
+      expect(find.text('Updated total: 245 FCFA'), findsOneWidget);
       tester.state<NavigatorState>(find.byType(Navigator)).pop();
       await settle(tester);
       await tester.tap(find.text('open'));
       await settle(tester);
       expect(find.textContaining('You already placed this order'), findsOneWidget);
-      expect(button('Pay ₹245'), findsOneWidget);
+      expect(button('Pay 245 FCFA'), findsOneWidget);
       expect(api.creates, hasLength(1));
     });
 
@@ -244,14 +270,14 @@ void main() {
       final api = FakeOrderApi();
       final orders = fakeOrders(api);
       await pumpApp(tester, const CheckoutScreen(selectedHostel: 'Block 2'), orders: orders, cart: cartWithThali());
-      await tapButton(tester, 'Pay ₹145');
+      await tapButton(tester, 'Pay 145 FCFA');
       await tapButton(tester, 'Cancel order');
       await tester.tap(find.descendant(of: find.byType(KButton), matching: find.text('Cancel order')).last);
       await settle(tester);
       expect(api.cancels, hasLength(1));
-      expect(button('Pay ₹145'), findsOneWidget);
+      expect(button('Pay 145 FCFA'), findsOneWidget);
       // A new attempt gets a new idempotency key.
-      await tapButton(tester, 'Pay ₹145');
+      await tapButton(tester, 'Pay 145 FCFA');
       expect(api.creates, hasLength(2));
       expect(api.creates[1].clientRequestId, isNot(api.creates[0].clientRequestId));
     });
@@ -270,7 +296,7 @@ void main() {
       final (api, _) = await show(tester, order);
       expect(find.text('Payment not completed'), findsWidgets);
       expect(find.textContaining('Pay by ${order.paymentDeadline.toLocal().hour % 12 == 0 ? 12 : order.paymentDeadline.toLocal().hour % 12}:'), findsOneWidget);
-      expect(button('Try payment again · ₹245'), findsOneWidget);
+      expect(button('Try payment again · 245 FCFA'), findsOneWidget);
       expect(find.text('Order journey'), findsNothing, reason: 'no progress is shown for an unpaid order');
 
       await tapButton(tester, 'Cancel order');

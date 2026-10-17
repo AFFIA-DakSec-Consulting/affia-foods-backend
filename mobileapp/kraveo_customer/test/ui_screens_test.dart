@@ -13,6 +13,7 @@ import 'package:customer_app/screens/live_tracking_screen.dart';
 import 'package:customer_app/screens/order_history_screen.dart';
 import 'package:customer_app/widgets/cart_sheet.dart';
 import 'package:customer_app/widgets/customization_modal.dart';
+import 'package:customer_app/widgets/home_sections.dart';
 import 'package:customer_app/widgets/review_modal.dart';
 import 'package:customer_app/widgets/ui/otp_boxes.dart';
 import 'package:customer_app/widgets/ui/sheet_chrome.dart';
@@ -134,14 +135,14 @@ void main() {
     await tester.pump(const Duration(seconds: 5));
     await tester.pump(const Duration(milliseconds: 800));
 
-    expect(find.text('DELIVERING TO'), findsOneWidget);
+    expect(find.text('LIVRER À'), findsOneWidget);
     expect(find.text('BH1'), findsWidgets);
     expect(find.text('VITFIRST'), findsOneWidget);
-    expect(find.text('Kitchens near campus'), findsOneWidget);
-    expect(find.text('Home'), findsOneWidget);
+    expect(find.text('Restaurants près de vous'), findsOneWidget);
+    expect(find.text('Un plat, un restaurant…'), findsOneWidget, reason: 'the bottom bar carries the search pill');
 
-    await tester.scrollUntilVisible(find.text('Sharma Highway Dhaba'), 200, scrollable: find.byType(Scrollable).first);
-    expect(find.text('Sharma Highway Dhaba'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Sharma Highway Dhaba').first, 200, scrollable: find.byType(Scrollable).first);
+    expect(find.text('Sharma Highway Dhaba'), findsWidgets, reason: 'a kitchen can appear in several Home rows');
     expect(tester.takeException(), isNull);
   });
 
@@ -151,9 +152,27 @@ void main() {
     await pumpScreen(tester, const HomeScreen(), session: session);
     await tester.pump(const Duration(seconds: 5));
     await tester.pump(const Duration(milliseconds: 800));
-    expect(find.text('DELIVERY POINT'), findsOneWidget);
-    expect(find.text('Choose drop point'), findsOneWidget);
-    expect(find.text('DELIVERING TO'), findsNothing);
+    expect(find.text('POINT DE LIVRAISON'), findsOneWidget);
+    expect(find.text('Choisir un point'), findsOneWidget);
+    expect(find.text('LIVRER À'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('HomeScreen quick filters: "Moins de 20 min" keeps only fast kitchens; clearing brings them back', (tester) async {
+    await pumpScreen(tester, const HomeScreen(), dhabas: sampleCatalogProvider());
+    await tester.pump(const Duration(seconds: 5));
+    final row = find.byWidgetPredicate((w) => w is Scrollable && w.axisDirection == AxisDirection.right).at(1);
+    final pill = find.widgetWithText(FilterPill, 'Moins de 20 min');
+    await tester.scrollUntilVisible(pill, 80, scrollable: row);
+    await tester.ensureVisible(pill);
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.tap(pill);
+    await tester.pump();
+    expect(tester.widget<FilterPill>(pill).selected, isTrue);
+    await tester.pump(const Duration(seconds: 2));
+    await tester.scrollUntilVisible(find.text('FC Night Mess').first, 200, scrollable: find.byType(Scrollable).first);
+    expect(find.text('FC Night Mess'), findsOneWidget, reason: 'its ETA is 15-20 min; filtering shows one result list');
+    expect(find.text('Sharma Highway Dhaba'), findsNothing, reason: '25-30 min');
     expect(tester.takeException(), isNull);
   });
 
@@ -162,9 +181,9 @@ void main() {
     await pumpScreen(tester, const HomeScreen(), dhabas: dhabas);
     await tester.pump(const Duration(seconds: 5));
     await tester.pump(const Duration(milliseconds: 800));
-    await tester.scrollUntilVisible(find.text('No kitchens match'), 200, scrollable: find.byType(Scrollable).first);
-    expect(find.text('No kitchens match'), findsOneWidget);
-    expect(find.text('Clear filters'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Aucun restaurant trouvé'), 200, scrollable: find.byType(Scrollable).first);
+    expect(find.text('Aucun restaurant trouvé'), findsOneWidget);
+    expect(find.text('Effacer les filtres'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -193,7 +212,7 @@ void main() {
     final dhaba = dhabas.dhabas.first;
     await pumpScreen(tester, DhabaMenuScreen(dhaba: dhaba, selectedHostel: 'Block 1'), dhabas: dhabas);
     await tester.scrollUntilVisible(find.text('Test dish gone'), 200, scrollable: find.byType(Scrollable).first);
-    expect(find.text('Sold out'), findsOneWidget);
+    expect(find.text('Épuisé'), findsOneWidget);
     expect(_pressable('Add Test dish gone'), findsNothing);
     expect(_pressable('Add Test dish in-stock'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -211,7 +230,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
     await tester.pump(const Duration(milliseconds: 600));
 
-    expect(find.text('Sharma Highway Dhaba'), findsOneWidget);
+    expect(find.text('Sharma Highway Dhaba'), findsWidgets, reason: 'a kitchen can appear in several Home rows');
     expect(find.text('Test dish a'), findsOneWidget);
     final sheetScroll = find.descendant(of: find.byType(KSheetFrame), matching: find.byType(Scrollable)).first;
     await tester.scrollUntilVisible(find.text('Have a coupon?'), 200, scrollable: sheetScroll);

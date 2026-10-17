@@ -140,6 +140,26 @@ void main() {
       expect(await CustomerApiService.getSavedToken(), isNull);
     });
 
+    test('the current backend role CLIENT is a customer: verify, session restore and Google all accept it', () async {
+      final client = userJson(name: 'Awa Diop', phone: _phone, email: null, hostel: 'Escale', isStudent: null, avatarId: 3, role: 'CLIENT');
+      backend.on('POST /auth/otp/verify', (_) => reply(200, {..._session(needsProfile: false), 'user': client}));
+      final r = await CustomerApiService.verifyOtp(_phone, '123456');
+      expect(r.success, isTrue, reason: 'CLIENT is the renamed STUDENT role, not a partner');
+      expect(r.partnerAccount, isFalse);
+      expect(await CustomerApiService.getSavedToken(), 'jwt-otp');
+
+      backend.on('GET /auth/profile', (_) => reply(200, {'success': true, 'user': client, 'needsProfile': false}));
+      final s = newSession();
+      await s.restore();
+      expect(s.status, SessionStatus.signedIn, reason: 'a CLIENT token survives an app restart');
+
+      backend.on('POST /auth/google', (_) => reply(200, {'success': true, 'token': 'jwt-g', 'user': client, 'isNewUser': false, 'needsProfile': false}));
+      expect((await CustomerApiService.googleSignIn('id-token')).success, isTrue);
+
+      backend.on('POST /auth/otp/verify', (_) => reply(200, {..._session(), 'user': userJson(role: 'VENDOR')}));
+      expect((await CustomerApiService.verifyOtp(_phone, '123456')).partnerAccount, isTrue, reason: 'real partners are still refused');
+    });
+
     test('offline is reported as a network error', () async {
       CustomerApiService.httpClientOverride = MockClient((_) async => throw const SocketException('offline'));
       final r = await CustomerApiService.requestOtp('771234567');
@@ -217,7 +237,19 @@ void main() {
       expect(find.text('Resend the code in 20s'), findsOneWidget);
     });
 
-    testWidgets('a correct code signs in, closes the login screens and routes to sign-up', (tester) async {
+    testWidgets('a development backend (console sender) code is shown in debug builds and fills the boxes', (tester) async {
+      backend.on('POST /auth/otp/request', (_) => reply(200, {..._sent(), 'channel': 'console', 'debugCode': '482913'}));
+      backend.on('POST /auth/otp/verify', (_) => reply(200, _session()));
+      final session = await openPhoneScreen(tester);
+      await requestCode(tester);
+      expect(find.textContaining('482913'), findsOneWidget);
+      await tester.tap(find.textContaining('482913'));
+      await settle(tester);
+      expect(backend.bodyOf(backend.to('POST /auth/otp/verify').single), {'phone': _phone, 'code': '482913'});
+      expect(session.status, SessionStatus.signedIn);
+    });
+
+    testWidgets('a correct code signs in, closes the login screens and goes straight to Home (no sign-up)', (tester) async {
       backend.on('POST /auth/otp/request', (_) => reply(200, _sent()));
       backend.on('POST /auth/otp/verify', (_) => reply(200, _session()));
       final session = await openPhoneScreen(tester);
@@ -225,11 +257,19 @@ void main() {
       await tester.enterText(find.byType(EditableText).first, '123456');
       await settle(tester);
       expect(backend.bodyOf(backend.to('POST /auth/otp/verify').single), {'phone': _phone, 'code': '123456'});
-      expect(session.status, SessionStatus.needsProfile);
+      expect(session.status, SessionStatus.signedIn, reason: 'even though the server says needsProfile');
       expect(session.user?.phone, _phone);
       expect(find.byType(OtpCodeScreen), findsNothing);
       expect(find.byType(PhoneLoginScreen), findsNothing);
       expect(await CustomerApiService.getSavedToken(), 'jwt-otp');
+    });
+
+    testWidgets('a phone account still incomplete on the server opens Home again after a restart', (tester) async {
+      await CustomerApiService.saveToken('jwt-otp');
+      backend.on('GET /auth/profile', (_) => reply(200, {'success': true, 'user': userJson(name: 'Client', phone: _phone, email: null, isStudent: null, hostel: null, avatarId: null, role: 'CLIENT'), 'needsProfile': true}));
+      final s = newSession();
+      await s.restore();
+      expect(s.status, SessionStatus.signedIn);
     });
 
     testWidgets('a complete profile goes straight in', (tester) async {

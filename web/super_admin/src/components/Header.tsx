@@ -15,6 +15,8 @@ interface HeaderProps {
   query: string;
   onQueryChange: (value: string) => void;
   workspace?: Workspace;
+  /** No global search (the restaurant's own space has none). */
+  hideSearch?: boolean;
   /** Switch between the admin menu and the restaurant-space preview. */
   onSwitchWorkspace?: () => void;
 }
@@ -44,11 +46,11 @@ const useNow = (intervalMs: number): number => {
   return now;
 };
 
-export const Header: React.FC<HeaderProps> = ({ activeTab, isLiveConnected, isLoading, adminProfile, onRefresh, onLogout, onOpenMenu, query, onQueryChange, workspace = 'admin', onSwitchWorkspace }) => {
+export const Header: React.FC<HeaderProps> = ({ activeTab, isLiveConnected, isLoading, adminProfile, onRefresh, onLogout, onOpenMenu, query, onQueryChange, workspace = 'admin', onSwitchWorkspace, hideSearch = false }) => {
   // Screens that exist have their own title; menu entries without a screen yet use their label and hint.
   const item = navItem(activeTab);
   const meta = TITLES[activeTab] ?? { title: item?.label ?? '', subtitle: item?.hint ?? '', searchHint: '' };
-  const searchEnabled = activeTab !== 'analytics' && !['orders', 'vendors', 'drivers', 'customers', 'applications', 'catalog'].includes(activeTab) && !['settings', 'settings-fees', 'settings-account'].includes(activeTab) && activeTab !== 'finance' && !isSoon(activeTab);
+  const searchEnabled = !hideSearch && activeTab !== 'analytics' && !['orders', 'vendors', 'drivers', 'customers', 'applications', 'catalog'].includes(activeTab) && !['settings', 'settings-fees', 'settings-account'].includes(activeTab) && activeTab !== 'finance' && !isSoon(activeTab);
   const now = useNow(10_000);
   const [lastSynced, setLastSynced] = useState<number | null>(null);
   const wasLoading = useRef(false);

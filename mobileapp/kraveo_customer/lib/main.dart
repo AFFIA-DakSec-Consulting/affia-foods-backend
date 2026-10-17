@@ -13,10 +13,13 @@ import 'services/customer_api_service.dart';
 import 'services/google_auth_service.dart';
 import 'services/push/firebase_push.dart';
 import 'services/push/push_service.dart';
+import 'widgets/ui/forui_theme.dart';
 import 'screens/live_tracking_screen.dart';
+import 'providers/location_provider.dart';
 import 'screens/auth_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/profile_setup_screen.dart';
+import 'services/location_service.dart';
 import 'widgets/ui/snack.dart';
 
 void main() {
@@ -28,19 +31,23 @@ void main() {
     local: PlatformLocalNotifier(),
     settings: MethodChannelSystemSettings(),
   );
-  runApp(KraveoCustomerApp(push: push));
+  runApp(KraveoCustomerApp(push: push, location: DeviceLocationService()));
 }
 
 class KraveoCustomerApp extends StatelessWidget {
   /// [googleAuth] and [createOrders] are test seams; the real Google layer and the real order
   /// backend are used when they are null.
-  const KraveoCustomerApp({super.key, this.googleAuth, this.createOrders, this.push});
+  const KraveoCustomerApp({super.key, this.googleAuth, this.createOrders, this.push, this.location});
 
   final GoogleAuthService? googleAuth;
   final OrderProvider Function()? createOrders;
 
   /// Push notifications (Docs/18). Null (the default, used by tests) means no push at all.
   final PushService? push;
+
+  /// Geolocation of the delivery address. Null (the default, used by tests) means Home shows
+  /// the drop-point picker instead of a located address.
+  final LocationService? location;
 
   @override
   Widget build(BuildContext context) {
@@ -51,6 +58,7 @@ class KraveoCustomerApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => CartProvider()),
         ChangeNotifierProvider(create: (_) => createOrders?.call() ?? OrderProvider()),
         if (push != null) ChangeNotifierProvider<PushService>.value(value: push!),
+        if (location != null) ChangeNotifierProvider(create: (_) => DeliveryLocationProvider(service: location!)),
       ],
       child: MaterialApp(
         title: 'Kraveo',
@@ -64,7 +72,8 @@ class KraveoCustomerApp extends StatelessWidget {
             statusBarIconBrightness: Brightness.dark,
             statusBarBrightness: Brightness.light,
           ),
-          child: child ?? const SizedBox.shrink(),
+          // Forui widgets anywhere in the app use the Kraveo colours and fonts.
+          child: KForui(child: child ?? const SizedBox.shrink()),
         ),
         home: const AuthGate(),
       ),
@@ -184,6 +193,9 @@ class _AuthGateState extends State<AuthGate> {
   }
 
   void _resetUserState() {
+    // Close the pages opened above the gate (profile, orders, tracking...), so the sign-in
+    // screen is what the student sees after logging out or deleting the account.
+    if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
     _push?.onSignedOut();
     // Orders are dropped immediately (and in-flight answers ignored) so nothing of the previous
     // student can show up on the next account.
@@ -194,6 +206,7 @@ class _AuthGateState extends State<AuthGate> {
       context.read<CartProvider>().resetForLogout();
       context.read<OrderProvider>().resetForLogout();
       context.read<DhabaProvider>().resetForLogout();
+      context.read<DeliveryLocationProvider?>()?.resetForLogout();
     });
   }
 
@@ -233,12 +246,23 @@ class _SplashScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
+    final k = context.k;
+    return Scaffold(
       body: Center(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          KBrandMark(height: 72),
-          SizedBox(height: 28),
-          SizedBox(width: 26, height: 26, child: CircularProgressIndicator(strokeWidth: 3)),
+          // Brand name as a two-tone wordmark (the bundled logo image still says Kraveo).
+          KReveal(
+            child: Text.rich(
+              TextSpan(children: [
+                TextSpan(text: 'AFFIA ', style: TextStyle(color: k.brand)),
+                const TextSpan(text: 'FOODS', style: TextStyle(color: KraveoPalette.y500)),
+              ]),
+              textAlign: TextAlign.center,
+              style: KraveoType.displayMd.copyWith(fontSize: 38, letterSpacing: 1.5),
+            ),
+          ),
+          const SizedBox(height: 28),
+          const SizedBox(width: 26, height: 26, child: CircularProgressIndicator(strokeWidth: 3)),
         ]),
       ),
     );

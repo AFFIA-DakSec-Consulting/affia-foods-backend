@@ -27,11 +27,12 @@ class KraveoPalette {
   static const y500 = Color(0xFFD99E00);
   static const y700 = Color(0xFF7A5800);
 
-  // Warm neutrals (light)
-  static const cream = Color(0xFFFBF8F1);
-  static const paper = Color(0xFFFFFFFF);
-  static const sand = Color(0xFFF2ECDF);
-  static const line = Color(0xFFE6E1D5);
+  // Cool neutrals (light), shared with the admin dashboard: pure white cards on a barely
+  // blue-tinted page. (Names kept from the earlier warm palette so no screen needs refactoring.)
+  static const cream = Color(0xFFF7F8FB); // page background (dashboard "night")
+  static const paper = Color(0xFFFFFFFF); // cards, sheets (dashboard "surface")
+  static const sand = Color(0xFFF1F3F8); // secondary fill inside a card (dashboard "surface2")
+  static const line = Color(0xFFE7EAF1); // hairlines and borders
   static const ink = Color(0xFF141A30);
   static const ink2 = Color(0xFF474D64);
   static const ink3 = Color(0xFF7B8095);

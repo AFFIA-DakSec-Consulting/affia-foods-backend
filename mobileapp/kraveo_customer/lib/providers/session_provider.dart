@@ -122,7 +122,7 @@ class SessionProvider with ChangeNotifier {
       return _endSession();
     }
     final user = CustomerUser.fromJson(result.user!);
-    if (user.role != 'STUDENT') {
+    if (!isCustomerRole(user.role)) {
       await CustomerApiService.clearToken();
       return _endSession();
     }
@@ -193,9 +193,13 @@ class SessionProvider with ChangeNotifier {
     _begin(CustomerUser.fromJson(userJson), needsProfile: needsProfile);
   }
 
+  /// Phone + code sign-ins go straight to Home: the sign-up screens are only for Google accounts
+  /// (the ones with an e-mail), whatever the server says about the profile.
+  static bool _showsSignUp(CustomerUser user, bool needsProfile) => needsProfile && (user.email ?? '').isNotEmpty;
+
   void _begin(CustomerUser user, {required bool needsProfile}) {
     _user = user;
-    _status = needsProfile ? SessionStatus.needsProfile : SessionStatus.signedIn;
+    _status = _showsSignUp(user, needsProfile) ? SessionStatus.needsProfile : SessionStatus.signedIn;
     onUserLoaded?.call(user);
     notifyListeners();
   }
@@ -209,7 +213,7 @@ class SessionProvider with ChangeNotifier {
     _savingProfile = false;
     if (_user != null && result.success && result.user != null) {
       _user = CustomerUser.fromJson(result.user!);
-      _status = result.needsProfile ? SessionStatus.needsProfile : SessionStatus.signedIn;
+      _status = _showsSignUp(_user!, result.needsProfile) ? SessionStatus.needsProfile : SessionStatus.signedIn;
     }
     notifyListeners();
     return result;

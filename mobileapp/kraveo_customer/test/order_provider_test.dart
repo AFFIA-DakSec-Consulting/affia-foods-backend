@@ -660,7 +660,7 @@ void main() {
       expect(fired, 1);
     });
 
-    test('create-order: Razorpay params parsed; an amount under ₹1 or missing key is refused', () async {
+    test('create-order: Razorpay params parsed; an amount under 1 FCFA or missing key is refused', () async {
       respond = (_) => json(200, {'success': true, 'key_id': 'rzp_test_1', 'order_id': 'order_X', 'amount': 24500, 'currency': 'INR'});
       final s = (await const HttpOrderApi().createPayment('o1')).value!;
       expect([s.keyId, s.razorpayOrderId, s.amountPaise], ['rzp_test_1', 'order_X', 24500]);

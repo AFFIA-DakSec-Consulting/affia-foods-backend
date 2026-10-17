@@ -54,7 +54,10 @@ describe('SettingsHub', () => {
       }
     }
     expect(ADMIN_HUB.flatMap((section) => section.cards).length).toBeGreaterThanOrEqual(25);
-    expect(ADMIN_SETTINGS_PAGES.every((entry) => isSoon(entry.id as any))).toBe(true);
+    // Four pages now have a real screen; every other one must still open the "Bientôt" page.
+    const built = ['settings-orders', 'settings-payments', 'settings-export', 'settings-security'];
+    expect(ADMIN_SETTINGS_PAGES.filter((entry) => !built.includes(entry.id)).every((entry) => isSoon(entry.id as any))).toBe(true);
+    expect(built.every((id) => !isSoon(id as any))).toBe(true);
   });
 
   it('a planned page says what it will configure and what is needed first', async () => {

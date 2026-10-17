@@ -23,7 +23,7 @@ List<Dhaba> sampleDhabas() => [
         deliveryFee: 25.0,
         minOrder: 99.0,
         isFavorite: true,
-        tags: ['Top Rated', 'Free Delivery over ₹299', 'Night Mess'],
+        tags: ['Top Rated', 'Free Delivery over 299 FCFA', 'Night Mess'],
       ),
       Dhaba(
         id: 'ven-2',
@@ -92,7 +92,7 @@ Map<String, List<MenuItemModel>> sampleMenus() => {
                 CustomizationOption(
                     id: 'co-1', name: '4 Butter Rotis', price: 0),
                 CustomizationOption(
-                    id: 'co-2', name: '2 Butter Naans (+₹25)', price: 25),
+                    id: 'co-2', name: '2 Butter Naans (+25 FCFA)', price: 25),
                 CustomizationOption(
                     id: 'co-3', name: '4 Plain Tandoori Rotis', price: 0),
               ],
@@ -134,7 +134,7 @@ Map<String, List<MenuItemModel>> sampleMenus() => {
                 CustomizationOption(
                     id: 'co-7', name: 'Amul Butter Tawa', price: 0),
                 CustomizationOption(
-                    id: 'co-8', name: 'Desi Ghee (+₹20)', price: 20),
+                    id: 'co-8', name: 'Desi Ghee (+20 FCFA)', price: 20),
               ],
             ),
             CustomizationGroup(

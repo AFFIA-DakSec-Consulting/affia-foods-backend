@@ -227,6 +227,8 @@ export interface AnalyticsData {
   orderCount: number;
   averageDeliveryMinutes: number;
   activeStudents: number;
+  /** What the server really sends (the line above is the older campus name). */
+  activeClients?: number;
   cancellationRate: number;
   hourlyOrders: Array<{ hour: string; orders: number }>;
   hostelOrders: Array<{ hostel: string; orders: number }>;
@@ -239,6 +241,12 @@ export interface AdminProfile {
   name: string;
   phone?: string;
   role: 'ADMIN';
+  /** Team role (SUPER_ADMIN for the owner). Missing on an older server. */
+  adminRole?: string;
+  /** Groups of screens the role may open; missing = everything. */
+  permissions?: string[];
+  /** The level on each group: read or write. Missing = write everywhere. */
+  access?: Record<string, 'read' | 'write'>;
 }
 
 const asNumber = (value: unknown, fallback = 0): number => {

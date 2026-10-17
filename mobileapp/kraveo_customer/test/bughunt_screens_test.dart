@@ -13,16 +13,18 @@ import 'package:customer_app/providers/session_provider.dart';
 import 'package:customer_app/screens/checkout_screen.dart';
 import 'package:customer_app/screens/dhaba_menu_screen.dart';
 import 'package:customer_app/screens/home_screen.dart';
+import 'package:customer_app/screens/search_screen.dart';
+import 'package:customer_app/screens/profile_screen.dart';
+import 'package:customer_app/widgets/home_bottom_bar.dart';
+import 'package:customer_app/widgets/home_sections.dart';
 import 'package:customer_app/screens/live_tracking_screen.dart';
 import 'package:customer_app/screens/order_history_screen.dart';
 import 'package:customer_app/screens/payment_success_screen.dart';
-import 'package:customer_app/screens/profile_screen.dart';
 import 'package:customer_app/screens/profile_setup_screen.dart';
 import 'package:customer_app/services/customer_api_service.dart';
 import 'package:customer_app/services/external_links.dart';
 import 'package:customer_app/services/google_auth_service.dart';
 import 'package:customer_app/services/order_api.dart';
-import 'package:customer_app/services/payment_gateway.dart';
 import 'package:customer_app/widgets/animated_rider_map.dart';
 import 'package:customer_app/widgets/map/map_view.dart';
 import 'package:customer_app/widgets/map/tracking_map.dart';
@@ -230,29 +232,29 @@ void main() {
     testWidgets('a failed catalog shows "Can\'t load kitchens" with Try again (and never invented kitchens); Try again loads them', (tester) async {
       final server = _Server(fail: true).install();
       await _pump(tester, const HomeScreen(), dhabas: DhabaProvider());
-      expect(find.text('Can\'t load kitchens'), findsOneWidget);
-      expect(find.text('Try again'), findsOneWidget);
+      expect(find.text('Impossible de charger les restaurants'), findsOneWidget);
+      expect(find.text('Réessayer'), findsOneWidget);
       expect(find.text('Sharma Highway Dhaba'), findsNothing);
       expect(find.text('FC Night Mess'), findsNothing);
-      expect(find.textContaining('places'), findsNothing);
+      expect(find.textContaining(RegExp(r'^\d+ restaurants?$')), findsNothing);
       expect(server.vendorRequests, 1);
 
       server
         ..fail = false
         ..vendors = [_vendor('v1', 'Real Dhaba')];
-      await _tap(tester, find.text('Try again'));
+      await _tap(tester, find.text('Réessayer'));
       expect(server.vendorRequests, 2);
-      expect(find.text('Can\'t load kitchens'), findsNothing);
-      await tester.scrollUntilVisible(find.text('Real Dhaba'), 200, scrollable: find.byType(Scrollable).first);
-      expect(find.text('Real Dhaba'), findsOneWidget);
+      expect(find.text('Impossible de charger les restaurants'), findsNothing);
+      await tester.scrollUntilVisible(find.text('Real Dhaba').first, 200, scrollable: find.byType(Scrollable).first);
+      expect(find.text('Real Dhaba'), findsWidgets, reason: 'a kitchen can appear in several Home rows');
       expect(tester.takeException(), isNull);
     });
 
     testWidgets('no approved kitchens: "No kitchens are open right now" (not an error)', (tester) async {
       _Server(vendors: []).install();
       await _pump(tester, const HomeScreen(), dhabas: DhabaProvider());
-      expect(find.text('No kitchens are open right now'), findsOneWidget);
-      expect(find.text('Can\'t load kitchens'), findsNothing);
+      expect(find.text('Aucun restaurant ouvert pour le moment'), findsOneWidget);
+      expect(find.text('Impossible de charger les restaurants'), findsNothing);
       expect(tester.takeException(), isNull);
     });
 
@@ -281,10 +283,10 @@ void main() {
       server.fail = true;
       await tester.fling(find.byType(CustomScrollView).first, const Offset(0, 400), 1000);
       await _settle(tester);
-      expect(find.textContaining('Couldn\'t refresh the kitchens'), findsOneWidget);
-      await tester.scrollUntilVisible(find.text('Real Dhaba'), 200, scrollable: find.byType(Scrollable).first);
-      expect(find.text('Real Dhaba'), findsOneWidget);
-      expect(find.text('Can\'t load kitchens'), findsNothing);
+      expect(find.textContaining('Impossible d\'actualiser les restaurants'), findsOneWidget);
+      await tester.scrollUntilVisible(find.text('Real Dhaba').first, 200, scrollable: find.byType(Scrollable).first);
+      expect(find.text('Real Dhaba'), findsWidgets, reason: 'a kitchen can appear in several Home rows');
+      expect(find.text('Impossible de charger les restaurants'), findsNothing);
     });
 
     testWidgets('the first-order promo is shown only to a student with no orders; unknown history hides it', (tester) async {
@@ -297,7 +299,7 @@ void main() {
 
       await _pump(tester, const HomeScreen(), dhabas: sampleCatalogProvider(), orders: await ordersLoaded(history: [orderModel(id: 'h1', status: 'DELIVERED', paymentStatus: 'PAID')]));
       expect(find.text('VITFIRST'), findsNothing, reason: 'a student who already ordered is refused VITFIRST by the server');
-      expect(find.text('FIRST ORDER'), findsNothing);
+      expect(find.text('PREMIÈRE COMMANDE'), findsNothing);
     });
 
     testWidgets('category chips come from the live menus: no "Night Mess", and every chip lists kitchens', (tester) async {
@@ -309,41 +311,71 @@ void main() {
       expect(find.text('Night Mess'), findsNothing);
       expect(find.text('Parathas'), findsNothing);
       final chipRow = find.byWidgetPredicate((w) => w is Scrollable && w.axisDirection == AxisDirection.right);
-      for (final chip in ['All', 'Thalis', 'Beverages', 'Rolls']) {
-        await tester.scrollUntilVisible(find.widgetWithText(KChoiceChip, chip), 60, scrollable: chipRow.first);
-        expect(find.widgetWithText(KChoiceChip, chip), findsOneWidget, reason: chip);
+      for (final chip in ['Tout', 'Thalis', 'Beverages', 'Rolls']) {
+        await tester.scrollUntilVisible(find.widgetWithText(CategoryTile, chip), 60, scrollable: chipRow.first);
+        expect(find.widgetWithText(CategoryTile, chip), findsOneWidget, reason: chip);
       }
-      await tester.tap(find.widgetWithText(KChoiceChip, 'Rolls'));
+      await tester.tap(find.widgetWithText(CategoryTile, 'Rolls'));
       await _settle(tester);
-      expect(find.text('No kitchens match'), findsNothing);
+      expect(find.text('Aucun restaurant trouvé'), findsNothing);
       await tester.scrollUntilVisible(find.text('Beta Kitchen'), 200, scrollable: find.byType(Scrollable).first);
       expect(find.text('Beta Kitchen'), findsOneWidget);
       expect(find.text('Alpha Dhaba'), findsNothing);
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('back from Orders / Me / Track returns to the Home tab first', (tester) async {
+    testWidgets('the avatar opens Me and back returns to Home; the search pill opens search; the heart shows favourites; the cart button opens the cart', (tester) async {
       _Server(vendors: [_vendor('v1', 'Real Dhaba')]).install();
-      await _pump(tester, const HomeScreen(), dhabas: DhabaProvider());
-      int tab() => tester.widget<IndexedStack>(find.byType(IndexedStack).first).index ?? 0;
-      expect(tab(), 0);
-      for (final (label, icon) in [('Orders', LucideIcons.receiptText), ('Me', LucideIcons.user), ('Track', LucideIcons.bike)]) {
-        await tester.tap(find.byIcon(icon));
-        await _settle(tester);
-        expect(tab(), isNot(0), reason: label);
-        await tester.binding.handlePopRoute();
-        await _settle(tester);
-        expect(tab(), 0, reason: 'system back from $label goes to Home');
-      }
+      final dhabas = DhabaProvider();
+      await _pump(tester, const HomeScreen(), dhabas: dhabas);
+      expect(find.byType(KGlassNav), findsNothing, reason: 'the tab bar is replaced by the Home / search / favourites bar');
+
+      // The avatar opens Me as its own page: back button, no bottom bar.
+      await tester.tap(find.byType(KAvatar).first);
+      await _settle(tester);
+      expect(find.byType(ProfileScreen), findsOneWidget);
+      expect(find.byType(HomeBottomBar), findsNothing);
+      await tester.tap(find.bySemanticsLabel('Back'));
+      await _settle(tester);
+      expect(find.byType(ProfileScreen), findsNothing);
+      expect(find.byType(HomeBottomBar), findsOneWidget);
+
+      // System back works too.
+      await tester.tap(find.byType(KAvatar).first);
+      await _settle(tester);
+      await tester.binding.handlePopRoute();
+      await _settle(tester);
+      expect(find.byType(ProfileScreen), findsNothing);
+
+      await tester.tap(find.text('Un plat, un restaurant…'));
+      await _settle(tester);
+      expect(find.byType(SearchScreen), findsOneWidget);
+      await tester.enterText(find.byKey(const ValueKey('search-field')), 'real');
+      await _settle(tester);
+      expect(find.text('Real Dhaba'), findsWidgets);
+      await tester.tap(find.bySemanticsLabel('Retour'));
+      await _settle(tester);
+      expect(find.byType(SearchScreen), findsNothing);
+
+      expect(dhabas.showFavoritesOnly, isFalse);
+      await tester.tap(find.byIcon(LucideIcons.heart).last);
+      await _settle(tester);
+      expect(dhabas.showFavoritesOnly, isTrue);
+      expect(find.text('Vos favoris'), findsOneWidget);
+
+      // The cart on the left opens the cart (empty here).
+      await tester.tap(find.byIcon(LucideIcons.shoppingCart).last);
+      await _settle(tester);
+      expect(find.text('Your cart is empty'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('no invented "Min ₹99" on kitchen cards', (tester) async {
+    testWidgets('no invented "Min 99 FCFA" on kitchen cards', (tester) async {
       _Server(vendors: [_vendor('v1', 'Real Dhaba')]).install();
       await _pump(tester, const HomeScreen(), dhabas: DhabaProvider());
-      await tester.scrollUntilVisible(find.text('Real Dhaba'), 200, scrollable: find.byType(Scrollable).first);
+      await tester.scrollUntilVisible(find.text('Real Dhaba').first, 200, scrollable: find.byType(Scrollable).first);
       expect(find.textContaining('Min'), findsNothing);
-      expect(find.textContaining('Delivery'), findsWidgets);
+      expect(find.textContaining('Livraison'), findsWidgets);
     });
   });
 
@@ -357,7 +389,7 @@ void main() {
       );
       await _pump(tester, DhabaMenuScreen(dhaba: dhabas.byId('v1')!, selectedHostel: 'BH2'), dhabas: dhabas);
       expect(server.vendorRequests, 1);
-      expect(find.textContaining('not taking orders right now'), findsOneWidget, reason: 'the banner follows the refreshed catalog');
+      expect(find.textContaining('ne prend pas de commande'), findsOneWidget, reason: 'the banner follows the refreshed catalog');
     });
 
     /// A provider that loaded one kitchen through the (fake) server, so the menu's own reload keeps it.
@@ -385,13 +417,13 @@ void main() {
       expect(cart.itemCount, 0);
     });
 
-    testWidgets('no invented "Min ₹…" chip on the menu', (tester) async {
+    testWidgets('no invented "Min …" chip on the menu', (tester) async {
       final server = _Server(vendors: [
         _vendor('v1', 'Real Dhaba', menu: [_dish('a1', 'v1', 'Thali', 'Thalis')])
       ]);
       final dhabas = await loaded(server);
       await _pump(tester, DhabaMenuScreen(dhaba: dhabas.byId('v1')!, selectedHostel: 'BH2'), dhabas: dhabas);
-      expect(find.textContaining('Min ₹'), findsNothing);
+      expect(find.textContaining(RegExp(r'Min \d')), findsNothing);
       expect(find.text('Thali'), findsWidgets);
     });
 
@@ -436,18 +468,18 @@ void main() {
       final cart = _cartWith(price: 120)..applyCoupon('VITFIRST'); // 120 + 25 - 24 = 121
       final (api, _) = await open(tester, cart: cart);
       api.onCreate = (r) async => const OrderResult.fail(OrderApiError(OrderErrorKind.rejected, statusCode: 400, code: 'COUPON_NOT_APPLICABLE', message: 'VITFIRST is only for your first order.'));
-      expect(_button('Pay ₹121'), findsOneWidget);
+      expect(_button('Pay 121 FCFA'), findsOneWidget);
 
-      await pay(tester, 'Pay ₹121');
+      await pay(tester, 'Pay 121 FCFA');
       expect(cart.appliedCouponCode, isNull, reason: 'the refused coupon is dropped by itself');
       expect(find.text('Checkout'), findsOneWidget, reason: 'still on the checkout screen');
-      expect(_button('Pay ₹145'), findsOneWidget, reason: 'the button shows the new total');
-      expect(find.textContaining('Coupon removed. VITFIRST is only for your first order. Your total is now ₹145.'), findsWidgets);
+      expect(_button('Pay 145 FCFA'), findsOneWidget, reason: 'the button shows the new total');
+      expect(find.textContaining('Coupon removed. VITFIRST is only for your first order. Your total is now 145 FCFA.'), findsWidgets);
       expect(tester.takeException(), isNull);
 
       // The next tap places the order without the coupon (new idempotency key).
       api.onCreate = null;
-      await pay(tester, 'Pay ₹145');
+      await pay(tester, 'Pay 145 FCFA');
       expect(api.creates, hasLength(2));
       expect(api.creates.last.couponCode, isNull);
       expect(api.creates.last.clientRequestId, isNot(api.creates.first.clientRequestId));
@@ -460,33 +492,33 @@ void main() {
       const uuid = '9f3c2d1e-0000-4000-8000-000000000001';
       api.onCreate = (r) async => const OrderResult.fail(OrderApiError(OrderErrorKind.rejected, statusCode: 400, code: 'INVALID_ITEMS', message: "Item '9f3c2d1e-0000-4000-8000-000000000001' is not available at this dhaba."));
       final before = server.vendorRequests;
-      await pay(tester, 'Pay ₹145');
+      await pay(tester, 'Pay 145 FCFA');
       expect(find.textContaining(uuid), findsNothing);
       expect(find.textContaining('no longer available'), findsWidgets);
       expect(server.vendorRequests, greaterThan(before), reason: 'the menu is refreshed after INVALID_ITEMS');
 
       final afterFirst = server.vendorRequests;
       api.onCreate = (r) async => const OrderResult.fail(OrderApiError(OrderErrorKind.rejected, statusCode: 400, code: 'VENDOR_CLOSED', message: 'This Dhaba is currently CLOSED for new orders.'));
-      await pay(tester, 'Pay ₹145');
+      await pay(tester, 'Pay 145 FCFA');
       expect(find.textContaining('closed for new orders'), findsWidgets);
       expect(find.textContaining('Dhaba is currently CLOSED'), findsNothing, reason: 'customer wording, not the raw server text');
       expect(server.vendorRequests, greaterThan(afterFirst), reason: 'and after VENDOR_CLOSED');
     });
 
-    testWidgets('paise are shown everywhere: Pay button, bill rows and total (₹175.40)', (tester) async {
+    testWidgets('paise are shown everywhere: Pay button, bill rows and total (175 FCFA)', (tester) async {
       final cart = _cartWith(price: 188)..applyCoupon('VITFIRST'); // 37.6 off -> 175.40
       await open(tester, cart: cart);
-      expect(_button('Pay ₹175.40'), findsOneWidget);
+      expect(_button('Pay 175 FCFA'), findsOneWidget);
       await tester.scrollUntilVisible(find.text('To pay'), 200, scrollable: find.byType(Scrollable).first);
       await tester.pump(const Duration(seconds: 2));
-      expect(find.text('-₹37.60'), findsOneWidget);
-      expect(find.text('₹175.40'), findsOneWidget);
-      expect(find.text('₹190'), findsNothing);
+      expect(find.text('-38 FCFA'), findsOneWidget);
+      expect(find.text('175 FCFA'), findsOneWidget);
+      expect(find.text('190 FCFA'), findsNothing);
     });
 
     testWidgets('a double tap on Pay opens ONE delivery-point sheet; its button is disabled for the first moments', (tester) async {
       final (api, _) = await open(tester);
-      final payButton = _button('Pay ₹145');
+      final payButton = _button('Pay 145 FCFA');
       await tester.tap(payButton);
       await tester.tap(payButton); // the second tap of the double tap
       await tester.pump(const Duration(milliseconds: 100));
@@ -509,11 +541,10 @@ void main() {
     });
 
     testWidgets('cancel wording: no "Nothing has been paid" promise; after a failed payment it says the bank refunds automatically', (tester) async {
-      final api = FakeOrderApi();
-      final gateway = FakeGateway()..next = const GatewayResult.failed();
-      final orders = fakeOrders(api, gateway: gateway);
+      final api = FakeOrderApi()..onSimulate = (id, m) async => const OrderResult.fail(OrderApiError(OrderErrorKind.server, statusCode: 500));
+      final orders = fakeOrders(api);
       await _pump(tester, const CheckoutScreen(selectedHostel: 'BH2'), orders: orders, cart: _cartWith(price: 220));
-      await pay(tester, 'Pay ₹245'); // a 245 server total equals the 220+25 estimate: the sheet opens and fails
+      await pay(tester, 'Pay 245 FCFA'); // a 245 server total equals the 220+25 estimate: the payment runs and fails
       expect(find.text('Payment not completed'), findsWidgets);
 
       await _tap(tester, _button('Cancel order'));
@@ -532,7 +563,7 @@ void main() {
       testWidgets('keyboard open on 360x640 at ${scale}x text: no overflow, the Pay button stays above the keyboard and the notice moves into the list', (tester) async {
         final (api, _) = await open(tester, textScale: scale);
         api.onCreate = (r) async => const OrderResult.fail(OrderApiError(OrderErrorKind.rejected, statusCode: 400, code: 'VENDOR_CLOSED', message: 'closed'));
-        await pay(tester, 'Pay ₹145');
+        await pay(tester, 'Pay 145 FCFA');
         expect(find.textContaining('closed for new orders'), findsWidgets, reason: 'the notice (and the snackbar) show the error');
         await tester.pump(const Duration(seconds: 4)); // the snackbar has gone
 
@@ -542,7 +573,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 400));
         expect(tester.takeException(), isNull, reason: 'no RenderFlex overflow');
 
-        final payRect = tester.getRect(_button('Pay ₹145'));
+        final payRect = tester.getRect(_button('Pay 145 FCFA'));
         expect(payRect.bottom, lessThanOrEqualTo(640 - 280 + 0.5), reason: 'the button is not hidden under the keyboard');
         expect(find.textContaining('Placing your order'), findsNothing, reason: 'the caption is dropped while typing');
         expect(find.textContaining('Next: Kraveo confirms'), findsNothing);
@@ -568,12 +599,12 @@ void main() {
         var continued = 0;
         await _pump(
           tester,
-          PaymentSuccessScreen(orderId: 'abc-123456', amountLabel: '₹190.40', vendorName: 'Sharma Highway Dhaba', autoContinue: const Duration(hours: 1), onContinue: () => continued++),
+          PaymentSuccessScreen(orderId: 'abc-123456', amountLabel: '190 FCFA', vendorName: 'Sharma Highway Dhaba', autoContinue: const Duration(hours: 1), onContinue: () => continued++),
           size: size,
           textScale: scale,
         );
         expect(find.byType(SingleChildScrollView), findsOneWidget);
-        expect(find.text('₹190.40'), findsOneWidget, reason: 'the amount shows paise');
+        expect(find.text('190 FCFA'), findsOneWidget, reason: 'the amount shows paise');
         expect(tester.takeException(), isNull);
         await tester.scrollUntilVisible(_button('Track my order'), 100, scrollable: find.byType(Scrollable).first);
         expect(_button('Track my order'), findsOneWidget);
@@ -603,7 +634,7 @@ void main() {
       await show(tester, history: [delivered(total: 1234.5)]);
       expect(find.textContaining('· BH3'), findsOneWidget, reason: '"Block 3" is shown as BH3');
       expect(find.textContaining('Block 3'), findsNothing);
-      expect(find.text('₹1,234.50'), findsOneWidget);
+      expect(find.text('1 235 FCFA'), findsOneWidget);
       expect(find.textContaining('earn Kraveo Coins'), findsNothing);
     });
 
@@ -865,7 +896,7 @@ void main() {
       expect(find.textContaining('No email app found'), findsOneWidget);
     });
 
-    testWidgets('the coins card no longer promises "50 coins = ₹20 off"', (tester) async {
+    testWidgets('the coins card no longer promises "50 coins = 20 FCFA off"', (tester) async {
       await _pump(tester, const ProfileScreen());
       expect(find.textContaining('50 coins'), findsNothing);
       expect(find.textContaining('off'), findsNothing);

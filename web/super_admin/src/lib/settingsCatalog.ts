@@ -3,7 +3,7 @@
 // The super admin sees every card; nothing is hidden from this role.
 import type React from 'react';
 import {
-  BellRing, BookOpen, CalendarClock, Car, CreditCard, FileSignature, FileText, FolderTree, Gift, History, KeyRound, Languages, Lock,
+  BellRing, Blocks, BookOpen, CalendarClock, Car, CreditCard, FileSignature, FileText, FolderTree, Gift, History, KeyRound, Languages, Lock,
   MapPinned, MessageSquareText, Navigation, Palette, Percent, Receipt, RotateCcw, Send, ShieldCheck, ShoppingBag, Store, UserRound,
   UtensilsCrossed, UserCog, Clock3, Wallet, Wrench, LifeBuoy, Download,
 } from 'lucide-react';
@@ -22,7 +22,7 @@ export interface SettingsSoonPage {
 const page = <I extends string>(p: SettingsSoonPage & { id: I }): SettingsSoonPage & { id: I } => p;
 
 export const ADMIN_SETTINGS_PAGES = [
-  page({ id: 'settings-security', title: 'Sécurité', icon: Lock, description: 'Mot de passe, double authentification et sessions ouvertes.', planned: ['Changer le code d’accès administrateur', 'Double authentification par SMS', 'Voir et fermer les sessions ouvertes', 'Adresses autorisées à se connecter'], needs: 'Des comptes administrateurs personnels côté serveur (aujourd’hui, un seul code d’accès).' }),
+  page({ id: 'settings-security', title: 'Sécurité', icon: Lock, description: 'Double authentification et sessions ouvertes.', planned: ['Changer le code d’accès administrateur', 'Double authentification par SMS', 'Voir et fermer les sessions ouvertes', 'Adresses autorisées à se connecter'], needs: 'Des comptes administrateurs personnels côté serveur (aujourd’hui, un seul code d’accès).' }),
   page({ id: 'settings-brand', title: 'Entreprise & marque', icon: Palette, description: 'Nom, logo, contacts de support et liens des boutiques d’applications.', planned: ['Nom commercial et logo (Affia Foods)', 'E-mail et téléphone de support', 'Liens App Store et Google Play', 'Adresse et informations légales de la société'], needs: 'Un espace de réglages « entreprise » côté serveur, repris ensuite par les applications.' }),
   page({ id: 'settings-orders', title: 'Règles de commande', icon: ShoppingBag, description: 'Montant minimum, délais d’acceptation et annulations.', planned: ['Montant minimum de commande', 'Délai laissé au restaurant pour accepter, puis annulation automatique', 'Qui peut annuler, et jusqu’à quand', 'Nombre maximum de restaurants par commande (déjà réglable dans « Frais & commission »)'], needs: 'Ces règles sont aujourd’hui écrites dans le code du serveur : il faut les rendre modifiables.' }),
   page({ id: 'settings-dispatch', title: 'Attribution des livreurs', icon: Navigation, description: 'Comment une commande est confiée à un livreur.', planned: ['Attribution automatique ou manuelle', 'Rayon de recherche autour du restaurant', 'Temps laissé au livreur pour accepter', 'Nombre de commandes simultanées par livreur'], needs: 'Un moteur d’attribution configurable côté serveur.' }),
@@ -83,7 +83,7 @@ export const ADMIN_HUB: HubSection[] = [
     { icon: FileSignature, title: 'Modèle de contrat', description: 'Contrats signés avec les restaurants et livreurs.', tab: 'contracts' },
   ] },
   { id: 'marketing', title: 'Marketing', cards: [
-    { icon: Gift, title: 'Parrainage & fidélité', description: 'Règles de parrainage et pièces Affia Foods.', tab: 'referral' },
+    { icon: Gift, title: 'Fidélité & abonnements', description: 'Pièces Affia Foods et plans de livraison offerte.', tab: 'loyalty' },
   ] },
   { id: 'communication', title: 'Communication', cards: [
     { icon: MessageSquareText, title: 'Modèles de messages', description: 'SMS, e-mails et notifications envoyés automatiquement.', tab: 'templates' },
@@ -94,7 +94,9 @@ export const ADMIN_HUB: HubSection[] = [
     { icon: FileText, title: 'Documents légaux', description: 'Conditions d’utilisation, confidentialité et remboursements.', tab: 'legal' },
     { icon: BookOpen, title: 'Centre d’aide', description: 'Articles d’aide pour les clients, restaurants et livreurs.', tab: 'help-center' },
   ] },
-  { id: 'system', title: 'Système', cards: [fromPage('settings-integrations'), fromPage('settings-maintenance'), fromPage('settings-export')] },
+  { id: 'system', title: 'Système', cards: [
+    { icon: Blocks, title: 'Modules', description: 'Activer ou couper chaque fonctionnalité de la plateforme.', tab: 'modules' },
+    fromPage('settings-integrations'), fromPage('settings-maintenance'), fromPage('settings-export')] },
 ];
 
 export const RESTAURANT_HUB: HubSection[] = [

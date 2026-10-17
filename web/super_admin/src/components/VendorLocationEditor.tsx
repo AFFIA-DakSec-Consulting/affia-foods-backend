@@ -77,7 +77,7 @@ export const VendorLocationEditor: React.FC<Props> = ({ id, name, pin, onSaved, 
       </div>
       {editing && (
         <form onSubmit={save} className="mt-3 space-y-2" noValidate>
-          <Field label="Position (à coller depuis Google Maps, ex. 23.0745, 76.8590)" htmlFor={inputId} error={error}>
+          <Field label="Position (à coller depuis Google Maps, ex. 14.7945, -16.9590)" htmlFor={inputId} error={error}>
             <input id={inputId} className="k-input" inputMode="decimal" autoComplete="off" autoFocus value={text} onChange={(e) => { setText(e.target.value); setError(''); }} placeholder="23.0745, 76.8590" aria-invalid={Boolean(error)} aria-describedby={error ? `${inputId}-msg` : undefined} />
           </Field>
           <div className="flex gap-2">

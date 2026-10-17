@@ -34,9 +34,9 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
 
   String get _digits => normalizeSenegalPhone(_phone.text);
 
-  Future<void> _openCodeScreen(String phone, {required int resendAfter, required int expiresIn}) async {
+  Future<void> _openCodeScreen(String phone, {required int resendAfter, required int expiresIn, String? debugCode}) async {
     await Navigator.of(context).push<void>(MaterialPageRoute<void>(
-      builder: (_) => OtpCodeScreen(phone: phone, resendAfterSeconds: resendAfter, expiresInSeconds: expiresIn),
+      builder: (_) => OtpCodeScreen(phone: phone, resendAfterSeconds: resendAfter, expiresInSeconds: expiresIn, debugCode: debugCode),
     ));
     if (mounted) setState(() => _busy = false);
   }
@@ -57,7 +57,7 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
     final result = await context.read<SessionProvider>().requestOtp(_digits);
     if (!mounted) return;
     if (result.success) {
-      await _openCodeScreen(result.phone!, resendAfter: result.resendAfterSeconds, expiresIn: result.expiresInSeconds);
+      await _openCodeScreen(result.phone!, resendAfter: result.resendAfterSeconds, expiresIn: result.expiresInSeconds, debugCode: result.debugCode);
       return;
     }
     // A code was sent a moment ago: the code screen is where the student should be.

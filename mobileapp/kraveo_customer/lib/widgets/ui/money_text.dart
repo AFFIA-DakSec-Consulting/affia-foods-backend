@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:kraveo_ui/kraveo_ui.dart';
 import 'format.dart';
 
-/// A rupee amount that counts up to [value] like `KAnimatedNumber`, but always formatted with
-/// [rupee] so paise are shown whenever the amount has any (the shared widget only offers a fixed
-/// number of decimals).
+/// A FCFA amount that counts up to [value] like `KAnimatedNumber`, formatted with [fcfa]
+/// (whole FCFA, thousands grouped).
 class KMoneyText extends StatelessWidget {
   const KMoneyText({super.key, required this.value, this.style});
 
@@ -17,7 +16,7 @@ class KMoneyText extends StatelessWidget {
       tween: Tween(begin: 0, end: value.toDouble()),
       duration: KMotion.slow,
       curve: KMotion.emphasized,
-      builder: (_, v, __) => Text(rupee(v), style: style ?? KraveoType.numeric.copyWith(color: context.k.ink)),
+      builder: (_, v, __) => Text(fcfa(v), style: style ?? KraveoType.numeric.copyWith(color: context.k.ink)),
     );
   }
 }

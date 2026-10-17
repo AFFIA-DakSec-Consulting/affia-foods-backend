@@ -210,14 +210,6 @@ describe('WEB-11 / WEB-16 live map inputs', () => {
     const list = h.querySelector('ul[aria-label="Livreurs suivis"]')!;
     expect(list.querySelectorAll('li')).toHaveLength(1);
   });
-
-  it('WEB-08: "Avg delivery time" uses deliveredAt, not a later updatedAt', async () => {
-    const delivered = order('d1', { status: 'DELIVERED', createdAt: ago(60 * 60_000), deliveredAt: ago(40 * 60_000), updatedAt: ago(1_000) }); // 20 min
-    const h = await mount(<LiveCommandCenter {...props({ orders: [delivered] })} />);
-    await flush();
-    const tile = Array.from(h.querySelectorAll('section[aria-label="Chiffres clés"] > *')).find((el) => el.textContent?.includes('Délai moyen de livraison'))!;
-    expect(tile.textContent).toContain('De la commande à la livraison, 1 livrée');
-  });
 });
 
 describe('DriverManager table view', () => {

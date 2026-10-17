@@ -75,10 +75,10 @@ describe('VendorLocationEditor', () => {
     const h = await mount(<VendorLocationEditor id="v1" name="Sharma Dhaba" pin={{ hasLocation: false }} onSaved={onSaved} />);
     await click(h.querySelector('button')!); // "Définir la position"
     const input = h.querySelector('input') as HTMLInputElement;
-    await type(input, '28.6139, 77.2090'); // Delhi
+    await type(input, '-17.4441, 14.6937'); // Dakar, numbers swapped
     await act(async () => { h.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
     expect(spy).not.toHaveBeenCalled();
-    expect(h.textContent).toMatch(/plus de 3 km du campus/);
+    expect(h.textContent).toMatch(/semblent inversées/);
     await type(input, '23.0745, 76.8590');
     await act(async () => { h.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
     await flush();
@@ -208,7 +208,7 @@ describe('ApplicationsPanel file check (dossier)', () => {
     expect(h.textContent).toContain('Dossier Ko');
     await click(h.querySelector('tbody tr')!);
     await flush();
-    expect(document.querySelector('ul[aria-label="Contrôle du dossier"]')!.textContent).toContain('Licence alimentaire (FSSAI)');
+    expect(document.querySelector('ul[aria-label="Contrôle du dossier"]')!.textContent).toContain('NINEA (identifiant fiscal)');
   });
 });
 

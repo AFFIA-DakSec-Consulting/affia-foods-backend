@@ -49,6 +49,16 @@ describe('parseLocationInput: every way an admin might paste a point (all must g
     if (r.ok) expect(String(r.lat).split('.')[1].length).toBeLessThanOrEqual(6);
   });
 
+  it('does not judge where a point is: the server decides what is served (any real coordinate parses)', () => {
+    for (const t of [`28°36'50.0"N 77°12'32.0"E`, `23°04'53.4"S 76°50'35.0"W`, `48.8566, 2.3522`, `14.6937, -17.4441`]) expect(parseLocationInput(t).ok).toBe(true);
+  });
+
+  it('spots swapped numbers only when swapping them gives a point in Senegal', () => {
+    expect(parseLocationInput('-17.4441, 14.6937').ok).toBe(false); // Dakar, swapped
+    expect(parseLocationInput('14.6937, -17.4441')).toEqual({ ok: true, lat: 14.6937, lng: -17.4441 });
+    expect(parseLocationInput('2.3522, 48.8566').ok).toBe(true); // swapped Paris is no point of Senegal either way: left to the server
+  });
+
   it('map links still work', () => {
     expect(parseLocationInput('https://www.google.com/maps/place/x/@23.0815,76.8431,17z')).toEqual({ ok: true, lat: 23.0815, lng: 76.8431 });
     expect(parseLocationInput('https://www.google.com/maps?q=23.0815,76.8431')).toEqual({ ok: true, lat: 23.0815, lng: 76.8431 });
@@ -62,10 +72,7 @@ describe('parseLocationInput: every way an admin might paste a point (all must g
     ['only one number', `23°04'53.4"N`, /Lecture impossible/],
     ['plain text', `abc`, /Lecture impossible/],
     ['a plus code', `7JF3+2X Bhopal`, /Lecture impossible/],
-    ['southern/western hemisphere (not India)', `23°04'53.4"S 76°50'35.0"W`, /3 km/],
-    ['another city', `28°36'50.0"N 77°12'32.0"E`, /3 km/],
-    ['negative degrees', `-23°04'53.4" 76°50'35.0"`, /3 km/],
-    ['swapped decimals, with a hint', `76.8431, 23.0815`, /semblent inversées.*23\.08150, 76\.84310/],
+    ['swapped decimals, with a hint', `-16.9590, 14.7945`, /semblent inversées.*14\.79450, -16\.95900/],
     ['empty', ``, /Collez les coordonnées/],
   ];
   it.each(refused)('refuses %s with a clear message', (_n, text, msg) => {

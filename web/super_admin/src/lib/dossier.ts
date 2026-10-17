@@ -12,7 +12,7 @@ export const dossierOf = (app: Application): Dossier => {
   const items: DossierItem[] = app.kind === 'VENDOR'
     ? [
       { key: 'phone', label: 'Téléphone', ok: filled(app.phone), hint: 'Pour joindre le responsable' },
-      { key: 'fssai', label: 'Licence alimentaire (FSSAI)', ok: filled(app.vendor?.fssaiNumber), hint: 'Numéro de licence à vérifier' },
+      { key: 'fssai', label: 'NINEA (identifiant fiscal)', ok: filled(app.vendor?.fssaiNumber), hint: 'Numéro à vérifier auprès des impôts' },
       { key: 'address', label: 'Adresse du restaurant', ok: filled(app.vendor?.address), hint: 'Adresse écrite' },
       { key: 'pin', label: 'Position sur la carte', ok: app.vendor ? vendorHasRealPin(app.vendor) : false, hint: 'Sans position, les livreurs ne peuvent pas s’y rendre' },
       { key: 'category', label: 'Type de cuisine', ok: filled(app.vendor?.category), hint: 'Catégorie affichée aux clients' },

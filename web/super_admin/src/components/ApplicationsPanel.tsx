@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Bike, Check, Ban, ChevronDown, ClipboardCheck, Copy, Download, Eye, KeyRound, Loader2, MapPin, Phone, Plus, RefreshCw, SearchX, Store, X } from 'lucide-react';
+import { Link2, Bike, Check, Ban, ChevronDown, ClipboardCheck, Copy, Download, Eye, KeyRound, Loader2, MapPin, Phone, Plus, RefreshCw, SearchX, Store, X } from 'lucide-react';
 import { Application, ApplicationCounts, ApprovalStatus, PartnerKind } from '../types';
 import type { SavedPin } from '../lib/vendorLocation';
 import { VendorLocationEditor } from './VendorLocationEditor';
@@ -20,6 +20,7 @@ import { dossierOf } from '../lib/dossier';
 import { PaginationBar, usePagination } from './ui/Pagination';
 import { ColumnsMenu, PageHeader, SearchField, SelectionBar, SortHeader, UnderlineTabs, ViewToggle, downloadCsv, nextSort, useTablePrefs } from './ui/PageToolbar';
 import { useToast } from './ui/Toast';
+import { RESTAURANT_SIGNUP_PATH } from '../lib/route';
 
 interface Props {
   /** Bumped by the app when a new application arrives over the socket, so the list reloads. */
@@ -69,6 +70,11 @@ export type Dialog =
 
 export const ApplicationsPanel: React.FC<Props> = ({ refreshKey, query = '', onQueryChange, onChanged, onAuthError, onLocationSaved }) => {
   const toast = useToast();
+  const copySignupLink = async () => {
+    const link = `${window.location.origin}${RESTAURANT_SIGNUP_PATH}`;
+    if (await copyText(link)) toast.success('Lien copié', 'Envoyez-le aux restaurants : ils s’inscrivent eux-mêmes, vous validez ici.');
+    else toast.error('Copie impossible', link);
+  };
   const [status, setStatus] = useState<StatusFilter>('PENDING');
   const [kind, setKind] = useState<KindFilter>('ALL');
   const [dossierFilter, setDossierFilter] = useState<DossierFilter>('ALL');
@@ -144,7 +150,7 @@ export const ApplicationsPanel: React.FC<Props> = ({ refreshKey, query = '', onQ
         {isVendor ? (
           <>
             <Detail label="Cuisine">{dash(a.vendor?.category)}</Detail>
-            <Detail label="FSSAI">{dash(a.vendor?.fssaiNumber)}</Detail>
+            <Detail label="NINEA">{dash(a.vendor?.fssaiNumber)}</Detail>
             <div className="col-span-2"><Detail label="Adresse"><span className="inline-flex items-start gap-1"><MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-kraveo-ink3" aria-hidden="true" />{dash(a.vendor?.address)}</span></Detail></div>
           </>
         ) : (
@@ -271,7 +277,8 @@ export const ApplicationsPanel: React.FC<Props> = ({ refreshKey, query = '', onQ
     <div className="space-y-5">
       <PageHeader icon={ClipboardCheck} title="Inscriptions" subtitle="Validez les nouveaux restaurants et livreurs avant qu’ils ne reçoivent des commandes" onRefresh={() => { setLoading(true); load(); }} refreshing={loading && items.length > 0}
         actions={(
-          <div className="relative">
+          <div className="relative flex items-center gap-2">
+            <button type="button" className="k-btn-ghost" onClick={copySignupLink} title="Copier le lien que vous envoyez aux restaurants pour qu’ils s’inscrivent"><Link2 className="h-4 w-4" aria-hidden="true" />Lien d’inscription</button>
             <button type="button" className="k-btn-accent" aria-haspopup="menu" aria-expanded={addMenu} onClick={() => setAddMenu(!addMenu)}>
               <Plus className="h-4 w-4" aria-hidden="true" />Ajouter manuellement<ChevronDown className="h-4 w-4" aria-hidden="true" />
             </button>

@@ -119,7 +119,7 @@ class OrderLine {
   final String name;
   final int quantity;
 
-  /// Unit price in rupees.
+  /// Unit price in FCFA.
   final double price;
 
   double get lineTotal => price * quantity;

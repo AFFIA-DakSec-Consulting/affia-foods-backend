@@ -17,13 +17,15 @@ interface Props {
   /** Optional: the picked restaurant lives in the app, so every page of the restaurant space shows the same one. */
   vendorId?: string;
   onVendorChange?: (id: string) => void;
+  /** The restaurant itself is signed in: its own sheet, no picker. */
+  own?: boolean;
 }
 
 /**
  * "Profil du restaurant" / "Horaires" of the restaurant space. Restaurants have no web login yet, so in the preview
  * the admin picks which restaurant to fill in (the same editor will serve the restaurant itself once it can sign in).
  */
-export const RestaurantProfilePage: React.FC<Props> = ({ title, subtitle, sections, vendors, onSaved, onAuthError, onLocationSaved, vendorId: controlledId, onVendorChange }) => {
+export const RestaurantProfilePage: React.FC<Props> = ({ title, subtitle, sections, vendors, onSaved, onAuthError, onLocationSaved, vendorId: controlledId, onVendorChange, own = false }) => {
   const sorted = useMemo(() => [...vendors].sort((a, b) => a.name.localeCompare(b.name, 'fr')), [vendors]);
   const [ownId, setOwnId] = useState('');
   const vendorId = controlledId !== undefined ? controlledId : ownId;
@@ -38,7 +40,7 @@ export const RestaurantProfilePage: React.FC<Props> = ({ title, subtitle, sectio
           <h1 className="font-display text-[23px] font-semibold leading-tight tracking-tight text-kraveo-ink sm:text-[26px] lg:text-[29px]">{title}</h1>
           <p className="mt-1 text-sm text-kraveo-ink3">{subtitle}</p>
         </div>
-        {sorted.length > 0 && (
+        {sorted.length > 0 && !own && (
           <div className="w-full sm:w-72">
             <label htmlFor="profile-vendor" className="k-label mb-1 block">Restaurant à remplir</label>
             <select id="profile-vendor" className="k-select" value={vendorId} onChange={(e) => setVendorId(e.target.value)}>

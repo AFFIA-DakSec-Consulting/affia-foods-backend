@@ -91,7 +91,7 @@ class CartSheet extends StatelessWidget {
       ],
       footer: Column(mainAxisSize: MainAxisSize.min, children: [
         KButton(
-          label: 'Checkout · ${rupee(cart.grandTotal)}',
+          label: 'Checkout · ${fcfa(cart.grandTotal)}',
           icon: LucideIcons.arrowRight,
           onPressed: () {
             Navigator.pop(context); // Close cart sheet
@@ -144,11 +144,11 @@ class _RestaurantHeader extends StatelessWidget {
           Expanded(
             child: Semantics(
               container: true,
-              label: '${restaurant.name}, ${restaurant.itemCount} ${restaurant.itemCount == 1 ? 'item' : 'items'}, ${rupee(restaurant.subtotal)}',
+              label: '${restaurant.name}, ${restaurant.itemCount} ${restaurant.itemCount == 1 ? 'item' : 'items'}, ${fcfa(restaurant.subtotal)}',
               child: ExcludeSemantics(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(restaurant.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: KraveoType.titleMd.copyWith(color: k.ink)),
-                  Text('${restaurant.itemCount} ${restaurant.itemCount == 1 ? 'item' : 'items'} · ${rupee(restaurant.subtotal)}', style: KraveoType.bodySm.copyWith(color: k.inkMuted)),
+                  Text('${restaurant.itemCount} ${restaurant.itemCount == 1 ? 'item' : 'items'} · ${fcfa(restaurant.subtotal)}', style: KraveoType.bodySm.copyWith(color: k.inkMuted)),
                 ]),
               ),
             ),
@@ -203,7 +203,7 @@ class _CartLine extends StatelessWidget {
               Text('Note: "${cartItem.specialInstructions}"', style: KraveoType.bodySm.copyWith(color: k.brand, fontStyle: FontStyle.italic)),
             ],
             const SizedBox(height: 4),
-            Text(rupee(cartItem.totalPrice), style: KraveoType.numericSm.copyWith(color: k.ink, fontSize: 19)),
+            Text(fcfa(cartItem.totalPrice), style: KraveoType.numericSm.copyWith(color: k.ink, fontSize: 19)),
             // Visible inside the sheet (a snackbar would sit behind it).
             if (!cart.canAddMore(cartItem.item.id)) ...[
               const SizedBox(height: 4),

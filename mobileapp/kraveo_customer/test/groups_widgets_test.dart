@@ -14,7 +14,6 @@ import 'package:customer_app/screens/order_history_screen.dart';
 import 'package:customer_app/screens/payment_success_screen.dart';
 import 'package:customer_app/services/google_auth_service.dart';
 import 'package:customer_app/services/order_api.dart';
-import 'package:customer_app/services/payment_gateway.dart';
 import 'package:customer_app/widgets/cart_sheet.dart';
 import 'package:customer_app/widgets/ui/sheet_chrome.dart';
 import 'package:flutter/material.dart';
@@ -167,17 +166,17 @@ void main() {
       await pumpApp(tester, const CheckoutScreen(selectedHostel: 'BH2'), orders: orders, cart: cart);
       expect(api.quotes, hasLength(1));
       expect(api.quotes.single.restaurants.single.vendorId, 'gx-ven-1');
-      expect(button('Pay ₹140'), findsOneWidget, reason: 'the quote total, not the Rs 25 estimate (145)');
+      expect(button('Pay 140 FCFA'), findsOneWidget, reason: 'the quote total, not the Rs 25 estimate (145)');
       await scrollTo(tester, find.text('Bill details'));
       expect(find.textContaining('Estimate'), findsNothing);
       expect(find.textContaining('Extra restaurant fee'), findsNothing);
       expect(find.text('Delivery & service fee'), findsOneWidget);
-      expect(find.text('₹20'), findsWidgets);
+      expect(find.text('20 FCFA'), findsWidgets);
 
-      await tapButton(tester, 'Pay ₹140');
+      await tapButton(tester, 'Pay 140 FCFA');
       expect(api.creates, hasLength(1));
       expect(api.groupCreates, isEmpty);
-      expect(find.text('Updated total: ₹245'), findsOneWidget, reason: 'the safety net when the server total differs from what was shown');
+      expect(find.text('Updated total: 245 FCFA'), findsOneWidget, reason: 'the safety net when the server total differs from what was shown');
       expect(tester.takeException(), isNull);
     });
 
@@ -188,21 +187,21 @@ void main() {
       await pumpApp(tester, const CheckoutScreen(selectedHostel: 'BH2'), orders: orders, cart: groupCart());
       expect(api.quotes, hasLength(1));
       expect(api.quotes.single.restaurants.map((r) => r.vendorId), ['gx-ven-1', 'gx-ven-2']);
-      expect(button('Pay ₹230'), findsOneWidget, reason: 'local estimate 190 + 25 + 15 while the quote loads');
+      expect(button('Pay 230 FCFA'), findsOneWidget, reason: 'local estimate 190 + 25 + 15 while the quote loads');
       await scrollTo(tester, find.text('Bill details'));
       expect(find.textContaining('Estimate'), findsOneWidget);
       expect(find.text('Extra restaurant fee (x 1)'), findsOneWidget);
 
       gate.complete(OrderResult.ok(quote()));
       await settle(tester);
-      expect(button('Pay ₹260'), findsOneWidget);
+      expect(button('Pay 260 FCFA'), findsOneWidget);
       await scrollTo(tester, find.text('Bill details'));
       expect(find.textContaining('Estimate'), findsNothing);
       expect(find.text('Items subtotal'), findsOneWidget);
-      expect(find.text('₹270'), findsOneWidget);
+      expect(find.text('270 FCFA'), findsOneWidget);
       expect(find.text('Extra restaurant fee (x 1)'), findsOneWidget);
       expect(find.text('Coupon (KRAVEO50)'), findsOneWidget);
-      expect(find.text('-₹50'), findsWidgets);
+      expect(find.text('-50 FCFA'), findsWidgets);
       expect(tester.takeException(), isNull);
     });
 
@@ -211,14 +210,14 @@ void main() {
       var offline = true;
       api.onQuote = (r) async => offline ? const OrderResult.fail(OrderApiError(OrderErrorKind.offline)) : OrderResult.ok(quote());
       await pumpApp(tester, const CheckoutScreen(selectedHostel: 'BH2'), orders: fakeOrders(api), cart: groupCart());
-      expect(button('Pay ₹230'), findsOneWidget);
+      expect(button('Pay 230 FCFA'), findsOneWidget);
       await scrollTo(tester, find.text('Bill details'));
       expect(find.textContaining('Estimate'), findsOneWidget);
       expect(find.text('Get the exact price'), findsOneWidget);
       offline = false;
       await tester.tap(find.text('Get the exact price'));
       await settle(tester);
-      expect(button('Pay ₹260'), findsOneWidget);
+      expect(button('Pay 260 FCFA'), findsOneWidget);
     });
 
     testWidgets('quote refusals are shown plainly: too many restaurants blocks Pay and teaches the cart its limit', (tester) async {
@@ -228,7 +227,7 @@ void main() {
       await pumpApp(tester, const CheckoutScreen(selectedHostel: 'BH2'), orders: fakeOrders(api), cart: cart);
       expect(cart.maxRestaurants, 1);
       expect(find.textContaining('Ordering from several restaurants at once is not available right now'), findsWidgets);
-      expect(tester.widget<KButton>(button('Pay ₹230')).onPressed, isNull, reason: 'cannot succeed: no point sending it');
+      expect(tester.widget<KButton>(button('Pay 230 FCFA')).onPressed, isNull, reason: 'cannot succeed: no point sending it');
       expect(api.groupCreates, isEmpty);
     });
 
@@ -238,47 +237,46 @@ void main() {
       await pumpApp(tester, const CheckoutScreen(selectedHostel: 'BH2'), orders: fakeOrders(api), cart: groupCart());
       await scrollTo(tester, find.text('Bill details'));
       expect(find.text('VITFIRST is only for your first order.'), findsOneWidget);
-      expect(tester.widget<KButton>(button('Pay ₹230')).onPressed, isNotNull);
+      expect(tester.widget<KButton>(button('Pay 230 FCFA')).onPressed, isNotNull);
     });
 
     testWidgets('an old server without /orders/quote: single behaviour, plain estimate, cart limit 1', (tester) async {
       final api = FakeOrderApi(); // quote answers 404 by default
       final cart = singleCart();
       await pumpApp(tester, const CheckoutScreen(selectedHostel: 'BH2'), orders: fakeOrders(api), cart: cart);
-      expect(button('Pay ₹145'), findsOneWidget);
+      expect(button('Pay 145 FCFA'), findsOneWidget);
       expect(cart.maxRestaurants, 1);
       expect(find.textContaining('not available'), findsNothing);
     });
   });
 
   group('Checkout: combined order', () {
-    Future<(FakeOrderApi, OrderProvider, CartProvider, FakeGateway)> open(WidgetTester tester, {double textScale = 1.3, Size size = const Size(360, 640), FakeGateway? gateway}) async {
+    /// [failPayment]: the payment (POST /payments/simulate) fails, so the order stays unpaid.
+    Future<(FakeOrderApi, OrderProvider, CartProvider)> open(WidgetTester tester, {double textScale = 1.3, Size size = const Size(360, 640), bool failPayment = false}) async {
       final api = FakeOrderApi()..onQuote = (r) async => OrderResult.ok(quote());
-      final gw = gateway ?? FakeGateway();
-      final orders = fakeOrders(api, gateway: gw);
+      if (failPayment) api.onSimulate = (id, m) async => const OrderResult.fail(OrderApiError(OrderErrorKind.offline));
+      final orders = fakeOrders(api);
       final cart = groupCart();
       await pumpApp(tester, const CheckoutScreen(selectedHostel: 'BH2'), orders: orders, cart: cart, textScale: textScale, size: size);
-      return (api, orders, cart, gw);
+      return (api, orders, cart);
     }
 
     testWidgets('shows each restaurant with its subtotal; one POST /order-groups; payment on the PRIMARY id for the group total; retry, cancel copy, success and tracking', (tester) async {
-      final gateway = FakeGateway()..next = const GatewayResult.cancelled();
-      final (api, orders, cart, _) = await open(tester, gateway: gateway);
+      final (api, orders, cart) = await open(tester, failPayment: true);
       expect(find.text('Your order · 2 restaurants'), findsOneWidget);
       expect(find.text('Kitchen 1'), findsWidgets);
       expect(find.text('Kitchen 2'), findsWidgets);
-      expect(find.text('₹100'), findsWidgets);
+      expect(find.text('100 FCFA'), findsWidgets);
 
-      await tapButton(tester, 'Pay ₹260');
+      await tapButton(tester, 'Pay 260 FCFA');
       expect(api.creates, isEmpty);
       expect(api.groupCreates, hasLength(1));
       expect(api.groupCreates.single.restaurants.map((r) => r.vendorId), ['gx-ven-1', 'gx-ven-2']);
       expect(api.groupCreates.single.dropoffHostel, 'BH2');
-      expect(gateway.opened.single.orderId, 'gx-order-1');
-      expect(gateway.opened.single.amountPaise, 26000);
+      expect(api.simulations.single.$1, 'gx-order-1', reason: 'one payment, on the primary part');
       expect(find.text('Payment not completed'), findsOneWidget);
-      expect(button('Try payment again · ₹260'), findsOneWidget);
-      expect(find.text('Updated total: ₹260'), findsNothing, reason: 'the quote was right');
+      expect(button('Try payment again · 260 FCFA'), findsOneWidget);
+      expect(find.text('Updated total: 260 FCFA'), findsNothing, reason: 'the quote was right');
 
       // Cancelling cancels the whole combined order and says so.
       await tapButton(tester, 'Cancel order');
@@ -288,17 +286,17 @@ void main() {
       expect(api.cancels, isEmpty);
 
       // Retry on the SAME order; success.
-      gateway.next = const GatewayResult.success(PaymentProof(razorpayOrderId: 'r', razorpayPaymentId: 'p', razorpaySignature: 's'));
-      api.onVerify = (p) async {
-        putGroup(api, groupView(payment: 'PAID'));
-        return const OrderResult.ok(null);
+      api.onSimulate = (id, m) async {
+        final paid = groupView(payment: 'PAID');
+        putGroup(api, paid);
+        return OrderResult.ok(SimulatedPayment(order: paid.orders.first));
       };
-      await tapButton(tester, 'Try payment again · ₹260');
+      await tapButton(tester, 'Try payment again · 260 FCFA');
       expect(api.groupCreates, hasLength(1));
-      expect(api.paymentStarts, ['gx-order-1', 'gx-order-1']);
+      expect(api.simulations.map((e) => e.$1), ['gx-order-1', 'gx-order-1']);
       expect(find.byType(PaymentSuccessScreen), findsOneWidget);
       expect(find.text('Waiting for your 2 restaurants to accept your order.'), findsOneWidget);
-      expect(find.text('₹260'), findsOneWidget);
+      expect(find.text('260 FCFA'), findsOneWidget);
       await tester.pump(const Duration(seconds: 3));
       await tester.pump(const Duration(seconds: 1));
       expect(find.byType(LiveTrackingScreen), findsOneWidget);
@@ -310,14 +308,14 @@ void main() {
     });
 
     testWidgets('cancelling the unpaid combined order cancels every restaurant (one request) and returns to the cart', (tester) async {
-      final (api, orders, cart, _) = await open(tester, gateway: FakeGateway()..next = const GatewayResult.cancelled());
+      final (api, orders, cart) = await open(tester, failPayment: true);
       api.onCancel = (id) async {
         final g = groupView(statuses: const ['CANCELLED', 'CANCELLED'], by: const ['CUSTOMER', 'SYSTEM'], reasons: const ['Cancelled at checkout', 'Another restaurant in your order could not take it']);
         putGroup(api, g);
         return OrderResult.ok(g.orders.first);
       };
-      await tapButton(tester, 'Pay ₹260');
-      expect(button('Try payment again · ₹260'), findsOneWidget);
+      await tapButton(tester, 'Pay 260 FCFA');
+      expect(button('Try payment again · 260 FCFA'), findsOneWidget);
       await tapButton(tester, 'Cancel order');
       await tester.tap(find.descendant(of: find.byType(KButton), matching: find.text('Cancel order')).last);
       await settle(tester);
@@ -325,16 +323,16 @@ void main() {
       expect(orders.activeOrders.single.status, OrderProgressStatus.cancelled);
       expect(cart.restaurantCount, 2, reason: 'the cart stays so the student can change it and order again');
       // A new attempt gets a new idempotency key.
-      await tapButton(tester, 'Pay ₹260');
+      await tapButton(tester, 'Pay 260 FCFA');
       expect(api.groupCreates, hasLength(2));
       expect(api.groupCreates[1].clientRequestId, isNot(api.groupCreates[0].clientRequestId));
     });
 
     testWidgets('same cart, network failure twice: same idempotency key both times', (tester) async {
-      final (api, _, _, _) = await open(tester);
+      final (api, _, _) = await open(tester);
       api.onCreateGroup = (r) async => const OrderResult.fail(OrderApiError(OrderErrorKind.offline));
-      await tapButton(tester, 'Pay ₹260');
-      await tapButton(tester, 'Pay ₹260');
+      await tapButton(tester, 'Pay 260 FCFA');
+      await tapButton(tester, 'Pay 260 FCFA');
       expect(api.groupCreates, hasLength(2));
       expect(api.groupCreates[0].clientRequestId, api.groupCreates[1].clientRequestId);
       expect(find.textContaining('No internet connection'), findsWidgets);
@@ -342,7 +340,7 @@ void main() {
     });
 
     testWidgets('a server total that differs from the quote is shown as "Updated total" before any money is taken', (tester) async {
-      final (api, _, _, gateway) = await open(tester);
+      final (api, _, _) = await open(tester);
       api.onCreateGroup = (r) async {
         final kids = groupChildrenJson();
         kids.first['totalAmount'] = 175; // 175 + 95 = 270
@@ -350,46 +348,46 @@ void main() {
         putGroup(api, g);
         return OrderResult.ok(g);
       };
-      await tapButton(tester, 'Pay ₹260');
-      expect(gateway.opened, isEmpty);
-      expect(find.text('Updated total: ₹270'), findsOneWidget);
-      expect(button('Pay ₹270'), findsOneWidget);
+      await tapButton(tester, 'Pay 260 FCFA');
+      expect(api.simulations, isEmpty);
+      expect(find.text('Updated total: 270 FCFA'), findsOneWidget);
+      expect(button('Pay 270 FCFA'), findsOneWidget);
       await scrollTo(tester, find.text('Extra restaurant fee (x 1)'));
       expect(find.text('Extra restaurant fee (x 1)'), findsOneWidget, reason: 'the placed bill splits the base fee from the extra restaurant fee');
     });
 
     testWidgets('a closed restaurant is named; an old server (404) switches the cart back to one restaurant', (tester) async {
-      final (api, _, cart, _) = await open(tester);
+      final (api, _, cart) = await open(tester);
       api.onCreateGroup = (r) async => const OrderResult.fail(OrderApiError(OrderErrorKind.rejected, statusCode: 400, code: 'VENDOR_CLOSED', message: 'This Dhaba is currently CLOSED for new orders.', vendorId: 'gx-ven-2'));
-      await tapButton(tester, 'Pay ₹260');
+      await tapButton(tester, 'Pay 260 FCFA');
       expect(find.textContaining('Kitchen 2 is closed for new orders right now'), findsWidgets);
 
       api.onCreateGroup = (r) async => const OrderResult.fail(OrderApiError(OrderErrorKind.notFound, statusCode: 404));
-      await tapButton(tester, 'Pay ₹260');
+      await tapButton(tester, 'Pay 260 FCFA');
       expect(find.textContaining('not available yet'), findsWidgets);
       expect(cart.maxRestaurants, 1);
       await settle(tester);
       expect(find.textContaining('Go back and keep one restaurant'), findsWidgets);
-      expect(tester.widget<KButton>(button('Pay ₹260')).onPressed, isNull);
+      expect(tester.widget<KButton>(button('Pay 260 FCFA')).onPressed, isNull);
     });
 
     testWidgets('a restaurant whose live menu has not loaded blocks the order by name', (tester) async {
       final api = FakeOrderApi()..onQuote = (r) async => OrderResult.ok(quote());
       await pumpApp(tester, const CheckoutScreen(selectedHostel: 'BH2'), orders: fakeOrders(api), cart: groupCart(), dhabas: DhabaProvider()..markLiveForTest(['gx-ven-1']));
-      await tapButton(tester, 'Pay ₹260');
+      await tapButton(tester, 'Pay 260 FCFA');
       expect(api.groupCreates, isEmpty);
       expect(find.textContaining('Kitchen 2\'s live menu'), findsWidgets);
     });
 
     for (final scale in [1.3, 2.0]) {
       testWidgets('360x640 at ${scale}x text: no overflow before and after placing', (tester) async {
-        final (api, _, _, _) = await open(tester, textScale: scale, gateway: FakeGateway()..next = const GatewayResult.cancelled());
+        final (api, _, _) = await open(tester, textScale: scale, failPayment: true);
         expect(tester.takeException(), isNull);
         await scrollTo(tester, find.text('Bill details'));
         expect(tester.takeException(), isNull);
         final g = groupView();
         putGroup(api, g);
-        await tapButton(tester, 'Pay ₹260');
+        await tapButton(tester, 'Pay 260 FCFA');
         await scrollTo(tester, find.text('Bill details'));
         expect(tester.takeException(), isNull);
       });
@@ -473,7 +471,7 @@ void main() {
       expect(find.text('Kitchen 2'), findsWidgets);
       expect(find.text('1 × Paneer Roll'), findsOneWidget);
       expect(find.text('Waiting for the restaurants'), findsOneWidget);
-      expect(find.textContaining('₹260'), findsWidgets);
+      expect(find.textContaining('260 FCFA'), findsWidgets);
       expect(find.text('Placed'), findsWidgets);
       await scrollTo(tester, button('Cancel order'));
       expect(button('Cancel order'), findsOneWidget);
@@ -517,9 +515,9 @@ void main() {
     testWidgets('unpaid: pay again on the primary, and the cancel copy says it cancels the whole order', (tester) async {
       final (api, _) = await show(tester, groupView());
       expect(find.text('Payment not completed'), findsWidgets);
-      expect(button('Try payment again · ₹260'), findsOneWidget);
+      expect(button('Try payment again · 260 FCFA'), findsOneWidget);
       expect(find.text('This cancels your whole order, from all 2 restaurants.'), findsOneWidget);
-      await tapButton(tester, 'Try payment again · ₹260');
+      await tapButton(tester, 'Try payment again · 260 FCFA');
       expect(api.paymentStarts, ['gx-order-1']);
     });
 
@@ -557,7 +555,7 @@ void main() {
       await scrollTo(tester, find.text('Cancelled and refunded'));
       expect(find.text('Cancelled and refunded'), findsOneWidget);
       expect(find.textContaining('Kitchen 2 couldn’t take its part, so your whole order was cancelled: Out of paneer'), findsOneWidget);
-      expect(find.textContaining('Your refund of ₹260 has been issued'), findsOneWidget);
+      expect(find.textContaining('Your refund of 260 FCFA has been issued'), findsOneWidget);
       expect(find.textContaining('Another restaurant in your order could not take it'), findsNothing, reason: 'the generic sibling text is not shown');
       expect(find.text('Order again'), findsOneWidget);
     });
@@ -623,7 +621,7 @@ void main() {
       expect(find.text('Kitchen 1 + Kitchen 2'), findsNWidgets(2), reason: 'one live card, one delivered card');
       expect(find.textContaining('2 restaurants'), findsNWidgets(2));
       expect(button('Track this order'), findsOneWidget);
-      expect(find.text('₹260'), findsWidgets);
+      expect(find.text('260 FCFA'), findsWidgets);
       await scrollTo(tester, find.text('Lone Dhaba'));
       expect(find.text('Lone Dhaba'), findsOneWidget);
       expect(find.text('Rate'), findsOneWidget, reason: 'only the lone order can be rated; a combined order has no rating');

@@ -64,24 +64,24 @@ void main() {
 
   group('CU1-07 / CU1-27 money formatting', () {
     test('whole rupees print without decimals, paise print both digits, thousands are grouped', () {
-      expect(rupee(190), '₹190');
-      expect(rupee(190.4), '₹190.40');
-      expect(rupee(190.40000000000003), '₹190.40');
-      expect(rupee(99.5), '₹99.50');
-      expect(rupee(0.05), '₹0.05');
-      expect(rupee(0), '₹0');
-      expect(rupee(999), '₹999');
-      expect(rupee(1234), '₹1,234');
-      expect(rupee(12345.5), '₹12,345.50');
-      expect(rupee(123456), '₹1,23,456');
-      expect(rupee(1234567), '₹12,34,567');
-      expect(rupee(-37.6), '-₹37.60');
+      expect(fcfa(190), '190 FCFA');
+      expect(fcfa(190.4), '190 FCFA');
+      expect(fcfa(190.40000000000003), '190 FCFA');
+      expect(fcfa(99.5), '100 FCFA');
+      expect(fcfa(0.05), '0 FCFA');
+      expect(fcfa(0), '0 FCFA');
+      expect(fcfa(999), '999 FCFA');
+      expect(fcfa(1234), '1 234 FCFA');
+      expect(fcfa(12345.5), '12 346 FCFA');
+      expect(fcfa(123456), '123 456 FCFA');
+      expect(fcfa(1234567), '1 234 567 FCFA');
+      expect(fcfa(-37.6), '-38 FCFA');
     });
 
-    test('the VITFIRST example from the report: ₹188 + 25 - 37.60 = ₹175.40, shown the same everywhere', () {
+    test('the VITFIRST example from the report: 188 FCFA + 25 - 37.60 = 175 FCFA, shown the same everywhere', () {
       const total = 188 + 25 - 37.6;
-      expect(rupee(total), '₹175.40');
-      expect(rupee(37.6), '₹37.60');
+      expect(fcfa(total), '175 FCFA');
+      expect(fcfa(37.6), '38 FCFA');
       expect(OrderModel.tryParse(orderJson(totalAmount: 190.4))!.totalPaise, 19040);
     });
   });

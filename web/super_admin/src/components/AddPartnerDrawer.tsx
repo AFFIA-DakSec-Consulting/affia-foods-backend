@@ -40,7 +40,7 @@ const validate = (kind: PartnerKind, f: Form): Partial<Record<keyof Form, string
       const parsed = parseLocationInput(f.location);
       if (!parsed.ok) e.location = parsed.message;
     }
-    if (f.fssaiNumber.trim() && !/^\d{14}$/.test(f.fssaiNumber.replace(/\s/g, ''))) e.fssaiNumber = 'Le numéro FSSAI comporte 14 chiffres. Laissez vide s’il n’est pas disponible.';
+    if (f.fssaiNumber.trim() && !/^[A-Za-z0-9]{7,14}$/.test(f.fssaiNumber.replace(/[\s.-]/g, ''))) e.fssaiNumber = 'Le NINEA compte 7 à 14 lettres ou chiffres. Laissez vide s’il n’est pas disponible.';
   } else {
     if (!NO_PLATE.has(f.vehicleType) && f.vehicleRegNo.trim().length < 4) e.vehicleRegNo = 'Saisissez la plaque d’immatriculation (laissez une note si elle n’est pas encore connue).';
     if (f.emergencyPhone.trim() && !/^[6-9]\d{9}$/.test(digits(f.emergencyPhone))) e.emergencyPhone = 'Saisissez un numéro valide à 10 chiffres ou laissez vide.';
@@ -148,8 +148,8 @@ export const AddPartnerDrawer: React.FC<Props> = ({ open, kind, onClose, onCreat
               <Field label="Position (à coller depuis Google Maps, ex. 23.0745, 76.8590)" htmlFor="ap-location" hint="Facultatif pour l’instant. Affiche la cuisine sur la carte en direct et aux livreurs. Vous pourrez l’ajouter plus tard depuis l’onglet Restaurants." error={show('location')}>
                 <input id="ap-location" className="k-input" inputMode="decimal" autoComplete="off" value={form.location} onChange={set('location')} placeholder="23.0745, 76.8590" aria-invalid={Boolean(show('location'))} />
               </Field>
-              <Field label="Numéro de licence FSSAI" htmlFor="ap-fssai" hint="Facultatif pour l’instant. 14 chiffres." error={show('fssaiNumber')}>
-                <input id="ap-fssai" className="k-input" inputMode="numeric" value={form.fssaiNumber} onChange={set('fssaiNumber')} aria-invalid={Boolean(show('fssaiNumber'))} />
+              <Field label="NINEA (identifiant fiscal)" htmlFor="ap-fssai" hint="Facultatif pour l’instant. 7 à 14 lettres ou chiffres." error={show('fssaiNumber')}>
+                <input id="ap-fssai" className="k-input" autoCapitalize="characters" value={form.fssaiNumber} onChange={set('fssaiNumber')} aria-invalid={Boolean(show('fssaiNumber'))} />
               </Field>
             </>
           )}

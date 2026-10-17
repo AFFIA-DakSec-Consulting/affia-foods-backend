@@ -8,6 +8,7 @@ import { AnimatedNumber } from './ui/AnimatedNumber';
 import { EmptyState } from './ui/EmptyState';
 import { KpiTile } from './ui/KpiTile';
 import { Skeleton } from './ui/Skeleton';
+import { OverviewStats } from './OverviewStats';
 
 type Range = 'today' | '7d' | '30d';
 
@@ -34,7 +35,7 @@ const ChartCard: React.FC<{ title: string; icon: React.ElementType; insight?: st
   </section>
 );
 
-export const AnalyticsPanel: React.FC = () => {
+export const AnalyticsPanel: React.FC<{ onAuthError?: (error: unknown) => void }> = ({ onAuthError = () => {} }) => {
   const [range, setRange] = useState<Range>('7d');
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -65,6 +66,7 @@ export const AnalyticsPanel: React.FC = () => {
 
   return (
     <div className="space-y-5 sm:space-y-6">
+      <OverviewStats onAuthError={onAuthError} />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="px-1 text-sm text-kraveo-ink2">Calculé à partir des commandes enregistrées. Vide signifie aucune commande, jamais des données d’exemple.</p>
         <div className="flex items-center gap-2">

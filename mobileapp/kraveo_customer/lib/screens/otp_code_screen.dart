@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:kraveo_ui/kraveo_ui.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -14,13 +15,16 @@ import '../widgets/ui/otp_boxes.dart';
 /// from /auth/otp/request and goes back to /auth/otp/verify unchanged. The code is only ever sent
 /// to verify; it is never stored or logged.
 class OtpCodeScreen extends StatefulWidget {
-  const OtpCodeScreen({super.key, required this.phone, this.resendAfterSeconds = 45, this.expiresInSeconds = 300});
+  const OtpCodeScreen({super.key, required this.phone, this.resendAfterSeconds = 45, this.expiresInSeconds = 300, this.debugCode});
 
   static const int codeLength = 6;
 
   final String phone;
   final int resendAfterSeconds;
   final int expiresInSeconds;
+
+  /// Code returned by a development backend (console sender). Shown in debug builds only.
+  final String? debugCode;
 
   @override
   State<OtpCodeScreen> createState() => _OtpCodeScreenState();
@@ -36,6 +40,7 @@ class _OtpCodeScreenState extends State<OtpCodeScreen> {
   String? _error;
   String? _info;
   int _errorTick = 0;
+  late String? _debugCode = widget.debugCode;
 
   @override
   void initState() {
@@ -113,6 +118,7 @@ class _OtpCodeScreenState extends State<OtpCodeScreen> {
       setState(() {
         _expiresIn = result.expiresInSeconds;
         _resendIn = result.resendAfterSeconds;
+        _debugCode = result.debugCode ?? _debugCode;
         _info = 'A new code is on its way.';
       });
       return;
@@ -177,6 +183,27 @@ class _OtpCodeScreenState extends State<OtpCodeScreen> {
                       onCompleted: (_) => _verify(),
                     ),
                     KErrorLine(message: _error),
+                    // Development backends send nothing (console sender): show the code they returned.
+                    if (kDebugMode && _debugCode != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: KPressable(
+                          onTap: () {
+                            _code.text = _debugCode!;
+                            _verify();
+                          },
+                          semanticLabel: 'Code de développement ${_debugCode!}, toucher pour l\'utiliser',
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            decoration: BoxDecoration(color: k.brandSoft, borderRadius: BorderRadius.circular(KRadius.md)),
+                            child: Row(children: [
+                              Icon(LucideIcons.bug, size: 16, color: k.brand),
+                              const SizedBox(width: 8),
+                              Expanded(child: Text('Dev : code ${_debugCode!} (toucher pour l\'utiliser)', style: KraveoType.bodySm.copyWith(color: k.brand, fontWeight: FontWeight.w700))),
+                            ]),
+                          ),
+                        ),
+                      ),
                     if (_info != null && _error == null)
                       Padding(padding: const EdgeInsets.only(top: 10), child: Text(_info!, style: KraveoType.bodySm.copyWith(color: k.inkMuted))),
                     const SizedBox(height: 18),

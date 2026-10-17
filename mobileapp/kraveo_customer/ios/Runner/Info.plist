@@ -29,7 +29,20 @@
 	<dict>
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
+		<!-- Dev server reached over plain http (*.sslip.io). Remove once it serves https. -->
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>sslip.io</key>
+			<dict>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+			</dict>
+		</dict>
 	</dict>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Kraveo utilise votre position pour définir votre adresse de livraison.</string>
 	<key>MAPS_API_KEY</key>
 	<string>$(MAPS_API_KEY)</string>
 	<key>GIDClientID</key>
@@ -50,16 +63,6 @@
 	<array>
 		<string>remote-notification</string>
 	</array>
-	<!-- Razorpay (iOS) - TO ENABLE LATER: uncomment so Razorpay can open UPI apps.
-	<key>LSApplicationQueriesSchemes</key>
-	<array>
-		<string>tez</string>
-		<string>phonepe</string>
-		<string>paytmmp</string>
-		<string>credpay</string>
-		<string>upi</string>
-	</array>
-	-->
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>

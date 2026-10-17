@@ -2,6 +2,13 @@ import 'package:kraveo_ui/kraveo_ui.dart' show kAvatarCount;
 
 import 'drop_point.dart';
 
+/// Roles of a customer account. The backend renamed `STUDENT` to `CLIENT`; both are accepted so
+/// the app works against old and new servers. Any other role (VENDOR, DRIVER, ADMIN) is a partner.
+const Set<String> kCustomerRoles = {'CLIENT', 'STUDENT'};
+
+/// True when [role] (as sent by the API) is a customer account; a missing role counts as one.
+bool isCustomerRole(Object? role) => role == null || kCustomerRoles.contains(role.toString().toUpperCase());
+
 /// The signed-in student, as returned by /auth/google and /auth/profile.
 class CustomerUser {
   const CustomerUser({

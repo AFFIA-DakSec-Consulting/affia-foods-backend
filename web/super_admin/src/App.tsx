@@ -6,7 +6,30 @@ import { RestaurantDashboard } from './components/RestaurantDashboard';
 import { RestaurantProfilePage } from './components/RestaurantProfilePage';
 import type { VendorProfile } from './lib/vendorProfile';
 import { AccountPage, SettingsHub, SettingsPageHeader, SettingsSoonPage } from './components/SettingsHub';
+import { ModulesPanel } from './components/ModulesPanel';
+import { SimulatorPanel } from './components/SimulatorPanel';
+import { ZonesPanel } from './components/ZonesPanel';
+import { ServiceAreasPanel } from './components/ServiceAreasPanel';
+import { PromotionsPanel } from './components/PromotionsPanel';
+import { BonusesPanel, LoyaltyPanel, PlansPanel } from './components/RulesCrud';
+import { CampaignsPanel } from './components/CampaignsPanel';
+import { TicketsPanel } from './components/TicketsPanel';
+import { ReviewsPanel } from './components/ReviewsPanel';
+import { CommissionsPanel, RefundsPanel } from './components/FinanceExtraPanels';
+import { SegmentsPanel } from './components/SegmentsPanel';
+import { LegalDocumentsPanel } from './components/LegalDocumentsPanel';
+import { HelpCenterPanel } from './components/HelpCenterPanel';
+import { SecurityPanel } from './components/SecurityPanel';
+import { TeamPanel } from './components/TeamPanel';
+import { ProspectsPanel } from './components/ProspectsPanel';
+import { ReferralPanel } from './components/ReferralPanel';
+import { RestaurantMenuPage, RestaurantOrdersPage, RestaurantPayoutsPage, RestaurantPromotionsPage, RestaurantReviewsPage, RestaurantStatsPage } from './components/RestaurantPages';
+import { ExportPage, NotificationsPanel, OrderRulesPage, PaymentsSettingsPage } from './components/AdminExtraPages';
+import { AuditPanel } from './components/AuditPanel';
+import { LiveCountersBar } from './components/LiveCountersBar';
+import { ReconcilePanel } from './components/ReconcilePanel';
 import { LiveCommandCenter } from './components/LiveCommandCenter';
+import { PlatformOverview } from './components/PlatformOverview';
 import { OrdersTable } from './components/OrdersTable';
 import { VendorManager } from './components/VendorManager';
 import { DriverManager } from './components/DriverManager';
@@ -23,7 +46,7 @@ import { LoginScreen } from './components/LoginScreen';
 import { LogoMark } from './components/ui/Logo';
 import { useToast } from './components/ui/Toast';
 import { ORDER_STATUS_LABEL } from './lib/tokens';
-import { RefreshCw, X } from 'lucide-react';
+import { RefreshCw, ShieldCheck, X } from 'lucide-react';
 import { NeedsAttentionPanel } from './components/NeedsAttentionPanel';
 import { EmptyState } from './components/ui/EmptyState';
 import { soonPageOf } from './lib/settingsCatalog';
@@ -32,6 +55,7 @@ import { Construction } from 'lucide-react';
 import { DrawerMode, OrderDrawer } from './components/OrderDrawer';
 import { appendOlderPage, mergeInto, mergeOrderLists, oldestOrderId, patchOrder, restoreIfUntouched, upsertOrder } from './lib/orders';
 import { sameData } from './lib/dashboardStats';
+import { AdminRoleId, ROLE_LABEL, canOpen, isReadOnlyTab, canUse, firstAllowedTab, groupOfTab, GROUP_LABEL, PermissionGroup } from './lib/permissions';
 import { isSessionRejected, reassignFailureMessage, sessionRetryDelayMs } from './lib/adminMessages';
 import { useConfirm } from './components/ui/ConfirmDialog';
 import { localAttention, pruneWithLiveOrders } from './lib/orderProblems';
@@ -110,9 +134,13 @@ export const App: React.FC = () => {
   const vendorsRef = useRef<Vendor[]>([]);
   vendorsRef.current = vendors;
   const attentionTimer = useRef<number | undefined>(undefined);
+  // What this team role may call. Missing = everything (owner, older server). Calls the role cannot make are skipped, not sent to be refused.
+  const permsRef = useRef<readonly string[] | undefined>(undefined);
+  permsRef.current = adminProfile?.permissions;
+  const allows = (group: PermissionGroup): boolean => canUse(permsRef.current, group);
 
   const handleAuthFailure = useCallback((error: unknown) => {
-    if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+    if (isSessionRejected(error)) {
       clearAuthToken();
       setIsAuth(false);
       setAdminProfile(undefined);
@@ -122,7 +150,7 @@ export const App: React.FC = () => {
 
   // Panels keep their own inline error message; this only logs the admin out when the session is no longer valid.
   const handleSessionError = useCallback((error: unknown) => {
-    if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+    if (isSessionRejected(error)) {
       clearAuthToken();
       setIsAuth(false);
       setAdminProfile(undefined);
@@ -130,7 +158,7 @@ export const App: React.FC = () => {
   }, []);
 
   const refreshPendingCount = useCallback(async () => {
-    if (!getAuthToken()) return;
+    if (!getAuthToken() || !canUse(permsRef.current, 'ops')) return;
     try {
       const result = await apiService.fetchApplications('PENDING');
       setPendingApplications(result.counts.PENDING);
@@ -139,7 +167,7 @@ export const App: React.FC = () => {
 
   // Dishes waiting for approval (sidebar badge). Quiet on failure: the Catalog tab shows real errors.
   const refreshPendingDishes = useCallback(async () => {
-    if (!getAuthToken()) return;
+    if (!getAuthToken() || !canUse(permsRef.current, 'ops')) return;
     try {
       const counts = await apiService.fetchCatalogPendingCounts();
       // Same numbers = same object, so the Catalog tab does not re-render on every poll.
@@ -149,7 +177,7 @@ export const App: React.FC = () => {
 
   // Settlements waiting to be paid (sidebar badge). Quiet on failure: the Finance tab shows real errors.
   const refreshPendingSettlements = useCallback(async () => {
-    if (!getAuthToken()) return;
+    if (!getAuthToken() || !canUse(permsRef.current, 'finance')) return;
     try {
       const count = await apiService.fetchPendingSettlementCount();
       setPendingSettlements((current) => (current === count ? current : count));
@@ -157,7 +185,7 @@ export const App: React.FC = () => {
   }, []);
 
   const loadAttention = useCallback(async () => {
-    if (!getAuthToken()) return;
+    if (!getAuthToken() || !canUse(permsRef.current, 'ops')) return;
     setAttention((current) => ({ ...current, loading: true }));
     try {
       const result = await apiService.fetchNeedsAttention();
@@ -177,6 +205,7 @@ export const App: React.FC = () => {
   /** Background poll: no spinner, no error banner (the live socket or the next poll catches up). */
   const silentRefresh = useCallback(async () => {
     if (!getAuthToken()) return;
+    if (!canUse(permsRef.current, 'ops')) { refreshPendingSettlements(); return; }
     try {
       const page = await apiService.fetchOrderPage();
       setOrders((current) => mergeOrderLists(current, page.orders, { keepOlder: olderLoadedRef.current }));
@@ -201,6 +230,7 @@ export const App: React.FC = () => {
 
   const fetchBackendData = useCallback(async () => {
     if (!getAuthToken()) return;
+    if (!canUse(permsRef.current, 'ops')) { refreshPendingSettlements(); return; } // no operations data for this role
     setIsLoading(true);
     setErrorMessage('');
     const results = await Promise.allSettled([
@@ -607,6 +637,17 @@ export const App: React.FC = () => {
     setMobileNavOpen(false);
   };
 
+  // A team member whose role cannot open the screen in the address bar lands on the first screen it may open.
+  useEffect(() => {
+    if (!isAuth || !adminProfile?.permissions) return;
+    if (workspaceOf(activeTab) === 'admin' && !canOpen(adminProfile.permissions, activeTab)) {
+      const target = firstAllowedTab(adminProfile.permissions, ['map', 'tickets', 'finance', 'campaigns', 'prospecting', 'analytics', 'settings']);
+      if (target) setActiveTab(target);
+    }
+    // Only when the profile changes: afterwards a screen the role cannot open shows the "Accès non autorisé" page.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuth, adminProfile]);
+
   const handleSelectTab = useCallback((tab: TabType) => {
     setActiveTab(tab);
     setSearchQuery('');
@@ -645,6 +686,11 @@ export const App: React.FC = () => {
   if (!isAuth) {
     return <LoginScreen onLoginSuccess={(profile) => { setAdminProfile(profile); setIsAuth(true); }} />;
   }
+
+  const accessDenied = !canOpen(adminProfile?.permissions, activeTab);
+  const readOnly = !accessDenied && isReadOnlyTab(adminProfile?.access, activeTab);
+  const deniedGroup = groupOfTab(activeTab);
+  const roleLabel = ROLE_LABEL[(adminProfile?.adminRole ?? 'SUPER_ADMIN') as AdminRoleId] ?? 'équipe';
 
   const activeOrderCount = orders.filter((order) => order.status !== 'DELIVERED' && order.status !== 'CANCELLED').length;
 
@@ -687,13 +733,26 @@ export const App: React.FC = () => {
         )}
         <main id="main" tabIndex={-1} className="min-w-0 flex-1 p-4 pb-12 outline-none sm:p-8 sm:pb-14">
           <div key={activeTab} className="mx-auto w-full max-w-[1480px] animate-fade-up">
+            {accessDenied ? (
+              <div className="k-card p-6">
+                <EmptyState icon={ShieldCheck} title="Accès non autorisé" description={`Votre rôle (${roleLabel}) ne donne pas accès à cette section${deniedGroup ? ` (${GROUP_LABEL[deniedGroup]})` : ''}. Demandez à un super admin de modifier votre rôle.`} />
+              </div>
+            ) : (
+              <>
+                {readOnly && (
+                  <p role="status" className="mb-4 flex items-center gap-2 rounded-k-md border border-kraveo-line bg-kraveo-surface2 px-4 py-3 text-sm font-semibold text-kraveo-ink2">
+                    <ShieldCheck className="h-4 w-4 shrink-0 text-kraveo-g600" aria-hidden="true" />Lecture seule : votre rôle ({roleLabel}) peut consulter cette section mais pas la modifier.
+                  </p>
+                )}
             {isSoon(activeTab) && soonPageOf(activeTab) && <SettingsSoonPage id={activeTab} onBack={() => handleSelectTab(workspace === 'restaurant' ? 'r-settings' : 'settings')} />}
             {isSoon(activeTab) && !soonPageOf(activeTab) && (
               <div className="k-card p-6">
                 <EmptyState icon={Construction} title={`${navItem(activeTab)?.label ?? 'Cette section'} : bientôt disponible`} description={`${navItem(activeTab)?.hint ?? ''}. Cette section fait partie du menu prévu ; son écran sera construit dans une prochaine étape.`} />
               </div>
             )}
-            {activeTab === 'map' && <LiveCommandCenter drivers={drivers} orders={orders} driverPartners={driverPartners} vendors={vendors} onReassignDriver={handleReassignDriver} onOpenOrder={openOrder} loading={isLoading} query={searchQuery} adminName={adminProfile?.name} onNavigate={handleSelectTab} />}
+            {activeTab === 'map' && <div className="mb-4"><LiveCountersBar onNavigate={handleSelectTab} onAuthError={handleSessionError} /></div>}
+            {activeTab === 'map' && <LiveCommandCenter drivers={drivers} orders={orders} driverPartners={driverPartners} vendors={vendors} onReassignDriver={handleReassignDriver} onOpenOrder={openOrder} loading={isLoading} query={searchQuery} adminName={adminProfile?.name} onNavigate={handleSelectTab} refreshKey={applicationsKey}
+              overview={<PlatformOverview vendors={vendors} driverPartners={driverPartners} dishesToApprove={pendingDishes.total} settlementsToPay={pendingSettlements} alerts={attentionEntries.length} refreshKey={applicationsKey} onNavigate={handleSelectTab} />} />}
             {activeTab === 'orders' && <OrdersTable orders={orders} attentionIds={attentionIds} onAdvance={handleStatusChange} onOpenOrder={openOrder} loading={isLoading} query={searchQuery} onClearQuery={clearQuery} now={now} hasMore={hasMoreOrders} loadingOlder={loadingOlder} onLoadOlder={handleLoadOlder} onRefresh={fetchBackendData} refreshing={isLoading} />}
             {activeTab === 'attention' && (
               <NeedsAttentionPanel
@@ -712,6 +771,7 @@ export const App: React.FC = () => {
                 onClearQuery={clearQuery}
               />
             )}
+            {activeTab === 'attention' && <div className="mt-5"><ReconcilePanel onAuthError={handleSessionError} /></div>}
             {activeTab === 'applications' && <ApplicationsPanel refreshKey={applicationsKey} query={searchQuery} onQueryChange={setSearchQuery} onChanged={fetchBackendData} onAuthError={handleSessionError} onLocationSaved={handleVendorLocationSaved} />}
             {activeTab === 'vendors' && <VendorManager vendors={vendors} orders={orders} busyVendorIds={busyVendorIds} onToggleVendor={handleToggleVendor} onLocationSaved={handleVendorLocationSaved} onCommissionSaved={handleVendorCommissionSaved} onProfileSaved={handleVendorProfileSaved} onAuthError={handleSessionError} onCreated={fetchBackendData} loading={isLoading} query={searchQuery} onClearQuery={clearQuery} onQueryChange={setSearchQuery} onRefresh={fetchBackendData} refreshing={isLoading} />}
             {activeTab === 'drivers' && <DriverManager drivers={driverPartners} orders={orders} now={now} onCreated={fetchBackendData} loading={isLoading} query={searchQuery} onClearQuery={clearQuery} onQueryChange={setSearchQuery} onRefresh={fetchBackendData} refreshing={isLoading} />}
@@ -719,13 +779,50 @@ export const App: React.FC = () => {
             {activeTab === 'catalog' && <CatalogPanel vendors={vendors} query={searchQuery} onQueryChange={setSearchQuery} onClearQuery={clearQuery} onAuthError={handleSessionError} pendingCounts={pendingDishes} onPendingChanged={refreshPendingDishes} />}
             {activeTab === 'finance' && <FinancePanel vendors={vendors} driverPartners={driverPartners} pendingSettlements={pendingSettlements} onSettlementsChanged={refreshPendingSettlements} onAuthError={handleSessionError} />}
             {activeTab === 'r-dashboard' && <RestaurantDashboard vendors={vendors.filter((v) => v.approvalStatus !== 'REJECTED')} orders={orders} vendorId={previewVendorId} onVendorChange={setPreviewVendorId} now={now} onAdvance={handleStatusChange} onToggleOpen={handleToggleVendor} openBusy={busyVendorIds.has(previewVendorId)} onOpenOrder={openOrder} onNavigate={handleSelectTab} loading={isLoading} />}
+            {activeTab === 'r-orders' && <RestaurantOrdersPage mode="current" vendors={vendors.filter((v) => v.approvalStatus !== 'REJECTED')} vendorId={previewVendorId} onVendorChange={setPreviewVendorId} orders={orders} now={now} onOpenOrder={openOrder} loading={isLoading} />}
+            {activeTab === 'r-history' && <RestaurantOrdersPage mode="history" vendors={vendors.filter((v) => v.approvalStatus !== 'REJECTED')} vendorId={previewVendorId} onVendorChange={setPreviewVendorId} orders={orders} now={now} onOpenOrder={openOrder} loading={isLoading} />}
+            {activeTab === 'r-returns' && <RestaurantOrdersPage mode="returns" vendors={vendors.filter((v) => v.approvalStatus !== 'REJECTED')} vendorId={previewVendorId} onVendorChange={setPreviewVendorId} orders={orders} now={now} onOpenOrder={openOrder} loading={isLoading} />}
+            {activeTab === 'r-stats' && <RestaurantStatsPage vendors={vendors.filter((v) => v.approvalStatus !== 'REJECTED')} vendorId={previewVendorId} onVendorChange={setPreviewVendorId} orders={orders} now={now} />}
+            {activeTab === 'r-reviews' && <RestaurantReviewsPage vendors={vendors.filter((v) => v.approvalStatus !== 'REJECTED')} vendorId={previewVendorId} onVendorChange={setPreviewVendorId} onAuthError={handleSessionError} />}
+            {activeTab === 'r-payouts' && <RestaurantPayoutsPage vendors={vendors.filter((v) => v.approvalStatus !== 'REJECTED')} vendorId={previewVendorId} onVendorChange={setPreviewVendorId} onAuthError={handleSessionError} />}
+            {activeTab === 'r-menu' && <RestaurantMenuPage vendors={vendors.filter((v) => v.approvalStatus !== 'REJECTED')} vendorId={previewVendorId} onVendorChange={setPreviewVendorId} onAuthError={handleSessionError} />}
+            {activeTab === 'r-promotions' && <RestaurantPromotionsPage vendors={vendors.filter((v) => v.approvalStatus !== 'REJECTED')} vendorId={previewVendorId} onVendorChange={setPreviewVendorId} onAuthError={handleSessionError} />}
             {activeTab === 'r-profile' && <RestaurantProfilePage vendorId={previewVendorId} onVendorChange={setPreviewVendorId} title="Profil du restaurant" subtitle="Votre vitrine : logo, photo, description, adresse et contact, tels que les voient les clients." sections={['identity', 'address', 'contact', 'prep']} vendors={vendors} onSaved={handleVendorProfileSaved} onLocationSaved={handleVendorLocationSaved} onAuthError={handleSessionError} />}
             {activeTab === 'r-hours' && <RestaurantProfilePage vendorId={previewVendorId} onVendorChange={setPreviewVendorId} title="Horaires & ouverture" subtitle="Les jours et les heures où le restaurant prend des commandes." sections={['hours']} vendors={vendors} onSaved={handleVendorProfileSaved} onAuthError={handleSessionError} />}
             {activeTab === 'settings' && <SettingsHub onNavigate={handleSelectTab} adminProfile={adminProfile} onLogout={handleLogout} />}
             {activeTab === 'r-settings' && <SettingsHub workspace="restaurant" onNavigate={handleSelectTab} onLogout={handleLogout} />}
             {activeTab === 'settings-fees' && (<><SettingsPageHeader title="Frais & commission" subtitle="Ce que paie le client, la part d’Affia Foods, l’arrondi et les règlements." onBack={() => handleSelectTab('settings')} /><SettingsPanel onAuthError={handleSessionError} /></>)}
             {activeTab === 'settings-account' && (<><SettingsPageHeader title="Mon compte" subtitle="Votre profil et votre session." onBack={() => handleSelectTab('settings')} /><AccountPage adminProfile={adminProfile} onLogout={handleLogout} /></>)}
-            {activeTab === 'analytics' && <AnalyticsPanel />}
+            {activeTab === 'analytics' && <AnalyticsPanel onAuthError={handleSessionError} />}
+            {activeTab === 'modules' && <ModulesPanel onAuthError={handleSessionError} />}
+            {activeTab === 'simulator' && <SimulatorPanel onAuthError={handleSessionError} />}
+            {activeTab === 'zones' && <ZonesPanel onAuthError={handleSessionError} />}
+            {activeTab === 'service-areas' && <ServiceAreasPanel onAuthError={handleSessionError} />}
+            {activeTab === 'promo-codes' && <PromotionsPanel onAuthError={handleSessionError} />}
+            {activeTab === 'plans' && <PlansPanel onAuthError={handleSessionError} />}
+            {activeTab === 'promo-offers' && <PromotionsPanel merchantOnly onAuthError={handleSessionError} />}
+            {activeTab === 'notifications' && <NotificationsPanel onNavigate={handleSelectTab} onAuthError={handleSessionError} />}
+            {activeTab === 'settings-security' && (<><SettingsPageHeader title="Sécurité" subtitle="Double authentification et sessions ouvertes." onBack={() => handleSelectTab('settings')} /><SecurityPanel onAuthError={handleSessionError} /></>)}
+            {activeTab === 'settings-orders' && (<><SettingsPageHeader title="Règles de commande" subtitle="Montant minimum, distance et commandes multi-restaurants." onBack={() => handleSelectTab('settings')} /><OrderRulesPage onAuthError={handleSessionError} /></>)}
+            {activeTab === 'settings-payments' && (<><SettingsPageHeader title="Moyens de paiement" subtitle="Prestataires de versement et règlements." onBack={() => handleSelectTab('settings')} /><PaymentsSettingsPage onAuthError={handleSessionError} onNavigate={handleSelectTab} /></>)}
+            {activeTab === 'settings-export' && (<><SettingsPageHeader title="Export de données" subtitle="Télécharger les règlements pour la comptabilité." onBack={() => handleSelectTab('settings')} /><ExportPage onAuthError={handleSessionError} /></>)}
+            {activeTab === 'refunds' && <RefundsPanel orders={orders} loading={isLoading} onOpenOrder={openOrder} onRetryRefund={handleRetryRefund} onRefresh={fetchBackendData} />}
+            {activeTab === 'commissions' && <CommissionsPanel onAuthError={handleSessionError} onOpenSettings={() => handleSelectTab('settings-fees')} />}
+            {activeTab === 'segments' && <SegmentsPanel onNavigate={handleSelectTab} onAuthError={handleSessionError} />}
+            {activeTab === 'contracts' && <LegalDocumentsPanel scope="contracts" onAuthError={handleSessionError} />}
+            {activeTab === 'legal' && (<><SettingsPageHeader title="Documents légaux" subtitle="Conditions, confidentialité et remboursements, avec leurs versions." onBack={() => handleSelectTab('settings')} /><LegalDocumentsPanel scope="legal" onAuthError={handleSessionError} /></>)}
+            {activeTab === 'help-center' && <HelpCenterPanel onAuthError={handleSessionError} />}
+            {activeTab === 'team' && <TeamPanel adminProfile={adminProfile ?? null} onAuthError={handleSessionError} />}
+            {activeTab === 'prospecting' && <ProspectsPanel onAuthError={handleSessionError} />}
+            {activeTab === 'referral' && <ReferralPanel onNavigate={handleSelectTab} onAuthError={handleSessionError} />}
+            {activeTab === 'loyalty' && <LoyaltyPanel onAuthError={handleSessionError} />}
+            {activeTab === 'courier-bonuses' && <BonusesPanel onAuthError={handleSessionError} />}
+            {activeTab === 'campaigns' && <CampaignsPanel onAuthError={handleSessionError} />}
+            {activeTab === 'tickets' && <TicketsPanel adminProfile={adminProfile ?? null} onAuthError={handleSessionError} />}
+            {activeTab === 'reviews' && <ReviewsPanel onAuthError={handleSessionError} />}
+            {activeTab === 'audit' && <AuditPanel onAuthError={handleSessionError} />}
+              </>
+            )}
           </div>
         </main>
       </div>

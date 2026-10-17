@@ -65,6 +65,7 @@ class OtpRequestResult extends ApiOutcome {
     this.field,
     this.phone,
     this.channel,
+    this.debugCode,
     this.expiresInSeconds = 300,
     this.resendAfterSeconds = 45,
   });
@@ -80,6 +81,10 @@ class OtpRequestResult extends ApiOutcome {
 
   /// How the code travels: `whatsapp`, or `console` while the server only logs it.
   final String? channel;
+
+  /// Development only: the backend's console sender returns the code it would have sent (no
+  /// WhatsApp message goes out). The app shows it in debug builds only, never in release.
+  final String? debugCode;
   final int expiresInSeconds;
   final int resendAfterSeconds;
 

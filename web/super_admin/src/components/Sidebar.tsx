@@ -4,6 +4,7 @@ import { AdminProfile, TabType } from '../types';
 import { LogoBadge, LogoMark } from './ui/Logo';
 import { Avatar } from './ui/Avatar';
 import { NAV_BY_WORKSPACE, NavItem, Workspace, firstChild } from '../lib/navigation';
+import { canOpen } from '../lib/permissions';
 
 interface SidebarProps {
   activeTab: TabType;
@@ -125,7 +126,16 @@ const UserCard: React.FC<Pick<BodyProps, 'adminProfile' | 'workspace' | 'onLogou
 };
 
 const SidebarBody: React.FC<BodyProps> = ({ activeTab, setActiveTab, badges, alertBadges, expanded, onNavigate, workspace = 'admin', onLogout, adminProfile, onSwitchWorkspace }) => {
-  const groups = NAV_BY_WORKSPACE[workspace];
+  // Only the entries this team role may open; a group left empty disappears.
+  const permissions = adminProfile?.permissions;
+  const groups = useMemo(() => NAV_BY_WORKSPACE[workspace]
+    .map((group) => ({
+      ...group,
+      items: group.items
+        .map((item) => (item.children ? { ...item, children: item.children.filter((child) => canOpen(permissions, child.id)) } : item))
+        .filter((item) => (item.children ? item.children.length > 0 : !item.id || canOpen(permissions, item.id))),
+    }))
+    .filter((group) => group.items.length > 0), [workspace, permissions]);
   // A parent whose child is the current screen is open; the admin can also open/close the others.
   const activeParent = useMemo(
     () => groups.flatMap((g) => g.items).find((item) => item.children?.some((child) => child.id === activeTab))?.label,

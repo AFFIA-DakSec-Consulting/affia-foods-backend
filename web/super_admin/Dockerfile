@@ -5,14 +5,14 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
-ARG VITE_API_BASE_URL=https://api.kraveo.site
-ARG VITE_SOCKET_URL=https://api.kraveo.site
+ARG VITE_API_BASE_URL=http://s598n3mrwe6p76b2bv2exazh.192.162.70.47.sslip.io
+ARG VITE_SOCKET_URL=http://s598n3mrwe6p76b2bv2exazh.192.162.70.47.sslip.io
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL VITE_SOCKET_URL=$VITE_SOCKET_URL
 RUN npm run build
 
 FROM nginx:1.27-alpine
 # nginx remplace ${API_ORIGIN} et ${API_WS_ORIGIN} au démarrage (modèles /etc/nginx/templates).
-ENV API_ORIGIN=https://api.kraveo.site API_WS_ORIGIN=wss://api.kraveo.site
+ENV API_ORIGIN=http://s598n3mrwe6p76b2bv2exazh.192.162.70.47.sslip.io API_WS_ORIGIN=ws://s598n3mrwe6p76b2bv2exazh.192.162.70.47.sslip.io
 COPY nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=build /app/dist /usr/share/nginx/html
 EXPOSE 80

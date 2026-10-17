@@ -126,7 +126,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
     final ok = await showKConfirm(
       context,
       title: 'Cancel this order?',
-      message: '$whole${order.isPaid ? '${order.isGroup ? 'None of the restaurants has accepted yet. ' : 'The restaurant has not accepted it yet. '}Your ${rupee(order.totalAmount)} will be refunded to your account.' : 'You have not completed a payment for this order, so nothing is charged. If your bank did take money, Kraveo refunds it automatically.'}',
+      message: '$whole${order.isPaid ? '${order.isGroup ? 'None of the restaurants has accepted yet. ' : 'The restaurant has not accepted it yet. '}Your ${fcfa(order.totalAmount)} will be refunded to your account.' : 'You have not completed a payment for this order, so nothing is charged. If your bank did take money, Kraveo refunds it automatically.'}',
       confirmLabel: 'Cancel order',
       cancelLabel: 'Keep it',
       danger: true,
@@ -411,7 +411,7 @@ class _StatusHero extends StatelessWidget {
     final unpaid = order.awaitsPayment;
     final String hint;
     if (unpaid) {
-      hint = confirming ? 'Razorpay reported your payment. Kraveo is confirming it; this page updates by itself.' : 'The restaurant only sees your order after you pay.';
+      hint = confirming ? 'Your payment was received. Kraveo is confirming it; this page updates by itself.' : 'The restaurant only sees your order after you pay.';
     } else {
       hint = order.isGroup ? groupNextHint(status) : status.nextHint;
     }
@@ -446,7 +446,7 @@ class _StatusHero extends StatelessWidget {
         ],
         const SizedBox(height: 16),
         Text(
-          '${order.title} · ${order.dropoffHostel.isEmpty ? 'Campus gate' : displayDropPoint(order.dropoffHostel)} · ${rupee(order.totalAmount)}',
+          '${order.title} · ${order.dropoffHostel.isEmpty ? 'Campus gate' : displayDropPoint(order.dropoffHostel)} · ${fcfa(order.totalAmount)}',
           style: KraveoType.bodySm.copyWith(color: k.ink, fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 2),
@@ -556,7 +556,7 @@ class _PaymentCard extends StatelessWidget {
         child: Row(children: [
           const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.6)),
           const SizedBox(width: 14),
-          Expanded(child: Text('Confirming your payment of ${rupee(order.totalAmount)}. Please don’t pay again.', style: KraveoType.body.copyWith(color: k.ink))),
+          Expanded(child: Text('Confirming your payment of ${fcfa(order.totalAmount)}. Please don’t pay again.', style: KraveoType.body.copyWith(color: k.ink))),
         ]),
       );
     }
@@ -577,7 +577,7 @@ class _PaymentCard extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 14),
-        KButton(label: 'Try payment again · ${rupee(order.totalAmount)}', icon: LucideIcons.lock, loading: paying, onPressed: paying || cancelling ? null : onPay),
+        KButton(label: 'Try payment again · ${fcfa(order.totalAmount)}', icon: LucideIcons.lock, loading: paying, onPressed: paying || cancelling ? null : onPay),
         const SizedBox(height: 8),
         KButton(label: 'Cancel order', kind: KButtonKind.ghost, loading: cancelling, onPressed: paying || cancelling ? null : onCancel),
         if (order.isGroup) ...[
@@ -676,12 +676,12 @@ class _CancelledCard extends StatelessWidget {
 
   String get _money {
     if (order.paymentStatus == PaymentStatus.refunded) {
-      return 'Your refund of ${rupee(order.totalAmount)} has been issued. It will reach your account in 5–7 working days.';
+      return 'Your refund of ${fcfa(order.totalAmount)} has been issued. It will reach your account in 5–7 working days.';
     }
     if (order.paymentStatus == PaymentStatus.paid) {
       return order.refundStatus == RefundStatus.failed
-          ? 'Your refund of ${rupee(order.totalAmount)} is taking longer than usual. Kraveo retries it automatically and support has been alerted.'
-          : 'You paid ${rupee(order.totalAmount)} for this order. Your refund is being processed.';
+          ? 'Your refund of ${fcfa(order.totalAmount)} is taking longer than usual. Kraveo retries it automatically and support has been alerted.'
+          : 'You paid ${fcfa(order.totalAmount)} for this order. Your refund is being processed.';
     }
     return 'No payment was taken for this order.';
   }

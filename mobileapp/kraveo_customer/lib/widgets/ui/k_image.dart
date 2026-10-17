@@ -5,12 +5,15 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 /// Network image with a calm placeholder, fade-in and a branded fallback.
 /// Fills whatever box it is given.
 class KImage extends StatelessWidget {
-  const KImage(this.url, {super.key, this.fit = BoxFit.cover, this.grayscale = false, this.fallbackIcon = LucideIcons.utensils});
+  const KImage(this.url, {super.key, this.fit = BoxFit.cover, this.grayscale = false, this.fallbackIcon = LucideIcons.utensils, this.fallback});
 
   final String url;
   final BoxFit fit;
   final bool grayscale;
   final IconData fallbackIcon;
+
+  /// Shown instead of the default icon placeholder when there is no URL or it fails to load.
+  final Widget? fallback;
 
   static const _grayMatrix = <double>[
     0.2126, 0.7152, 0.0722, 0, 0, //
@@ -22,7 +25,7 @@ class KImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final k = context.k;
-    Widget fallback() => ColoredBox(
+    Widget fallback() => this.fallback ?? ColoredBox(
           color: k.brandSoft,
           child: Center(child: Icon(fallbackIcon, size: 30, color: k.brand.withValues(alpha: 0.4))),
         );

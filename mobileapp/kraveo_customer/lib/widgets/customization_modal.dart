@@ -101,7 +101,7 @@ class _CustomizationModalState extends State<CustomizationModal> {
       subtitle: Row(children: [
         VegMark(isVeg: widget.item.isVeg, size: 14),
         const SizedBox(width: 8),
-        Text('Base price ${rupee(widget.item.price)}', style: KraveoType.bodySm.copyWith(color: k.inkMuted)),
+        Text('Base price ${fcfa(widget.item.price)}', style: KraveoType.bodySm.copyWith(color: k.inkMuted)),
       ]),
       children: [
         for (final group in widget.item.customizationGroups) _buildGroup(context, group),
@@ -116,7 +116,7 @@ class _CustomizationModalState extends State<CustomizationModal> {
         const SizedBox(height: 8),
       ],
       footer: KButton(
-        label: 'Add to cart · ${rupee(calculateTotalPrice)}',
+        label: 'Add to cart · ${fcfa(calculateTotalPrice)}',
         icon: LucideIcons.plus,
         onPressed: _submit,
       ),
@@ -216,7 +216,7 @@ class _OptionTile extends StatelessWidget {
       child: KPressable(
         onTap: onTap,
         scale: 0.985,
-        semanticLabel: '$label${price > 0 ? ', plus ${rupee(price)}' : ''}${selected ? ', selected' : ''}',
+        semanticLabel: '$label${price > 0 ? ', plus ${fcfa(price)}' : ''}${selected ? ', selected' : ''}',
         child: AnimatedContainer(
           duration: KMotion.base,
           curve: KMotion.emphasized,
@@ -244,10 +244,10 @@ class _OptionTile extends StatelessWidget {
                   : null,
             ),
             const SizedBox(width: 12),
-            Expanded(child: Text(price > 0 ? label.replaceAll(RegExp(r'\s*\(\+\s*\u20B9\s*\d+\)'), '') : label, style: KraveoType.body.copyWith(color: k.ink, fontWeight: FontWeight.w600))),
+            Expanded(child: Text(price > 0 ? label.replaceAll(RegExp(r'\s*\(\+\s*(?:\u20B9\s*[\d,]+|[\d ]+\s*(?:FCFA|F))\)'), '') : label, style: KraveoType.body.copyWith(color: k.ink, fontWeight: FontWeight.w600))),
             if (price > 0) ...[
               const SizedBox(width: 8),
-              Text('+${rupee(price)}', style: KraveoType.body.copyWith(color: k.brand, fontWeight: FontWeight.w700)),
+              Text('+${fcfa(price)}', style: KraveoType.body.copyWith(color: k.brand, fontWeight: FontWeight.w700)),
             ],
           ]),
         ),

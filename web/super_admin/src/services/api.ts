@@ -37,9 +37,16 @@ import type { CommissionType } from '../lib/pricing';
 import type { DropPointInfo } from '../lib/campus';
 import type { SavedPin } from '../lib/vendorLocation';
 import type { VendorProfile } from '../lib/vendorProfile';
+import { PartnerSession, parsePartnerSession } from '../lib/partnerSignup';
+import {
+  AuditEntry, ServiceAreasInfo, PointCheck, AdminSessionRow, TwoFactorSetup, Prospect, ProspectDetail, ProspectStats, TeamMember, HelpArticle, LegalDocument, Referral, ReferralStats, LiveCounts, OrphanReport, Overview, StatsRange, TeamAuditEntry, Campaign, CampaignSendResult, CampaignStats, CourierBonus, LoyaltyRule, ModuleSetting, Paged, PlatformModule, Promotion, PromotionStats, Review, ReviewStats,
+  SettingSaved, SimulationResult, SubscriptionPlan, SupportStats, Ticket, ToggleResult, Zone, ZoneRow,
+  parseAuditEntry, parseServiceAreas, parsePointCheck, parseAdminSession, parseTwoFactorSetup, parseProspect, parseProspectDetail, parseProspectStats, parseTeamMe, parseTeamMember, parseHelpArticle, parseLegalDocument, parseReferral, parseReferralStats, parseLiveCounts, parseOrphanReport, parseOverview, parseTeamAudit, parseBonus, parseCampaign, parseCampaignStats, parseList, parseLoyaltyRule, parseModule, parsePaged, parsePlan, parsePromotion, parsePromotionStats, parseReview,
+  parseReviewStats, parseSendResult, parseSetting, parseSettingSaved, parseSimulation, parseSupportStats, parseTicket, parseToggle, parseZone,
+} from '../lib/platformParse';
 
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? 'https://api.kraveo.site' : 'http://localhost:5001');
-export const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || (import.meta.env.PROD ? 'https://api.kraveo.site' : 'http://localhost:5001');
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? 'http://s598n3mrwe6p76b2bv2exazh.192.162.70.47.sslip.io' : 'http://localhost:5001');
+export const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || (import.meta.env.PROD ? 'http://s598n3mrwe6p76b2bv2exazh.192.162.70.47.sslip.io' : 'http://localhost:5001');
 
 export class ApiError extends Error {
   /** `code` / `field` come from the server's `{ success:false, message, code?, field? }` error body (contract 2). */
@@ -91,13 +98,29 @@ export const getAuthToken = (): string => {
   }
 };
 
-export const setAuthToken = (token: string, adminProfile?: AdminProfile) => {
+/** Who is signed in on this browser: the operations team (default) or a partner restaurant. */
+export type SessionRole = 'ADMIN' | 'VENDOR';
+let memoryRole: SessionRole = 'ADMIN';
+
+export const getSessionRole = (): SessionRole => {
+  try {
+    return localStorage.getItem('kraveo_session_role') === 'VENDOR' ? 'VENDOR' : 'ADMIN';
+  } catch {
+    return memoryRole;
+  }
+};
+
+export const setAuthToken = (token: string, adminProfile?: AdminProfile, role: SessionRole = 'ADMIN') => {
   const clean = token.replace(/^Bearer\s+/i, '');
   memoryToken = clean;
+  memoryRole = role;
   try {
     localStorage.setItem('kraveo_admin_token', clean);
     storageWriteFailed = false;
+    if (role === 'VENDOR') localStorage.setItem('kraveo_session_role', 'VENDOR');
+    else localStorage.removeItem('kraveo_session_role');
     if (adminProfile) localStorage.setItem('kraveo_admin_profile', JSON.stringify(adminProfile));
+    else localStorage.removeItem('kraveo_admin_profile');
   } catch {
     storageWriteFailed = true;
   }
@@ -105,10 +128,12 @@ export const setAuthToken = (token: string, adminProfile?: AdminProfile) => {
 
 export const clearAuthToken = () => {
   memoryToken = '';
+  memoryRole = 'ADMIN';
   storageWriteFailed = false;
   try {
     localStorage.removeItem('kraveo_admin_token');
     localStorage.removeItem('kraveo_admin_profile');
+    localStorage.removeItem('kraveo_session_role');
   } catch { /* storage blocked: nothing stored to clear */ }
 };
 
@@ -185,13 +210,22 @@ const orderOrNull = (raw: any): Order | null => {
   return raw && typeof raw === 'object' && raw.id ? normalizeOrder(raw) : null;
 };
 
+/** Stores the restaurant's session once the server has confirmed the account is a restaurant one. */
+const startPartnerSession = (data: any): PartnerSession => {
+  const session = parsePartnerSession(data);
+  if (!data?.token || session.user.role !== 'VENDOR') throw new ApiError(403, 'Cet espace est réservé aux restaurants. Les livreurs et les clients utilisent l’application mobile.', 'NOT_A_RESTAURANT');
+  setAuthToken(data.token, undefined, 'VENDOR');
+  return session;
+};
+
 export const apiService = {
-  async adminLogin(passcode: string, username?: string): Promise<{ token: string; admin: AdminProfile }> {
+  /** `identifier` (phone number) = a team member with a personal code; without it, the general access code of the owner. */
+  async adminLogin(passcode: string, username?: string, identifier?: string, otp?: string): Promise<{ token: string; admin: AdminProfile }> {
     if (!passcode.trim()) throw new ApiError(400, 'Veuillez saisir le code d’accès admin.');
     const response = await request<{ token: string; admin: AdminProfile }>('/api/auth/admin-login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ passcode: passcode.trim(), username: username?.trim() || 'Campus Dispatch Admin' }),
+      body: JSON.stringify({ passcode: passcode.trim(), username: username?.trim() || 'Campus Dispatch Admin', ...(identifier?.trim() ? { identifier: identifier.trim() } : {}), ...(otp?.trim() ? { otp: otp.trim() } : {}) }),
     });
     if (!response?.token || response.admin?.role !== 'ADMIN') throw new ApiError(401, 'Le serveur n’a pas renvoyé de session admin valide.');
     setAuthToken(response.token, response.admin);
@@ -202,7 +236,16 @@ export const apiService = {
     const profile = await request<any>('/api/auth/profile');
     const user = profile?.user || profile;
     if (user?.role !== 'ADMIN') throw new ApiError(403, 'Cette session n’est pas autorisée à accéder à la console admin.');
-    return { id: user.id, name: user.name, phone: user.phone, role: 'ADMIN' };
+    const base: AdminProfile = { id: user.id, name: user.name, phone: user.phone, role: 'ADMIN' };
+    // The team role and what it may open. If this call fails for any reason other than a rejected session, the owner's full access is assumed
+    // (the server still refuses what the role cannot do).
+    try {
+      const me = parseTeamMe(await requestFull<any>('/api/admin/team/me'));
+      return me ? { ...base, adminRole: me.role, permissions: me.permissions, access: me.access } : base;
+    } catch (error) {
+      if (error instanceof ApiError && (error.status === 401 || (error.status === 403 && error.code !== 'PERMISSION_DENIED'))) throw error;
+      return base;
+    }
   },
 
   async fetchOrders(): Promise<Order[]> {
@@ -252,7 +295,9 @@ export const apiService = {
 
   /** Edits a restaurant's public profile on its behalf (Docs/24). Partial update: send only what changed. */
   async updateVendorProfile(vendorId: string, patch: Record<string, unknown>): Promise<VendorProfile> {
-    const data = await request<any>(`/api/admin/vendors/${encodeURIComponent(vendorId)}/profile`, { method: 'PATCH', body: JSON.stringify(patch) });
+    const data = getSessionRole() === 'VENDOR'
+      ? await request<any>('/api/partner/vendor/profile', { method: 'PUT', body: JSON.stringify(patch) })
+      : await request<any>(`/api/admin/vendors/${encodeURIComponent(vendorId)}/profile`, { method: 'PATCH', body: JSON.stringify(patch) });
     return {
       ...(typeof data?.name === 'string' ? { name: data.name } : {}),
       ...(typeof data?.category === 'string' ? { category: data.category } : {}),
@@ -269,24 +314,54 @@ export const apiService = {
 
   /** Sends a logo or cover photo (PNG, JPEG or WebP, 3 MB at most) and returns its public address. Save the profile to use it. */
   async uploadVendorImage(vendorId: string, kind: 'logo' | 'banner', file: Blob): Promise<string> {
-    const data = await request<any>(`/api/admin/vendors/${encodeURIComponent(vendorId)}/image?kind=${kind}`, { method: 'POST', body: file, headers: { 'Content-Type': file.type } });
+    const path = getSessionRole() === 'VENDOR' ? `/api/partner/vendor/image?kind=${kind}` : `/api/admin/vendors/${encodeURIComponent(vendorId)}/image?kind=${kind}`;
+    const data = await request<any>(path, { method: 'POST', body: file, headers: { 'Content-Type': file.type } });
     if (typeof data?.url !== 'string') throw new ApiError(0, 'Le serveur n’a pas renvoyé l’adresse de l’image.', 'UNEXPECTED');
     return data.url;
   },
 
   /** Sets a restaurant's map pin (admin only; the server checks ranges and that the point is on campus). */
   async setVendorLocation(vendorId: string, lat: number, lng: number): Promise<SavedPin> {
-    const data = await request<any>(`/api/admin/vendors/${encodeURIComponent(vendorId)}/location`, {
-      method: 'PATCH',
+    const own = getSessionRole() === 'VENDOR'; // a restaurant sets its own pin; the admin sets any restaurant's
+    const data = await request<any>(own ? '/api/partner/vendor/location' : `/api/admin/vendors/${encodeURIComponent(vendorId)}/location`, {
+      method: own ? 'PUT' : 'PATCH',
       body: JSON.stringify({ lat, lng }),
     });
     return {
       lat: Number(data?.lat ?? lat), lng: Number(data?.lng ?? lng), hasLocation: data?.hasLocation !== false,
       // an admin save is always source ADMIN with no accuracy; an older server does not say, so fill it in
-      locationSource: data?.locationSource === 'DEVICE' ? 'DEVICE' : 'ADMIN',
+      locationSource: data?.locationSource === 'DEVICE' ? 'DEVICE' : own ? 'DEVICE' : 'ADMIN',
       locationSetAt: typeof data?.locationSetAt === 'string' ? data.locationSetAt : new Date().toISOString(),
       locationAccuracyM: typeof data?.locationAccuracyM === 'number' ? data.locationAccuracyM : null,
     };
+  },
+
+  // ── Partner restaurant: its own account (sign-up, sign-in, application, orders) ──
+  /** Creates the restaurant account (PENDING) and signs it in. */
+  async partnerSignup(body: Record<string, unknown>): Promise<PartnerSession> {
+    const data = await requestFull<any>('/api/auth/partner-signup', { method: 'POST', body: JSON.stringify(body) });
+    return startPartnerSession(data);
+  },
+
+  /** Signs a restaurant in. Riders and clients are refused here: they use the mobile apps. */
+  async partnerLogin(phone: string, password: string): Promise<PartnerSession> {
+    const data = await requestFull<any>('/api/auth/partner-login', { method: 'POST', body: JSON.stringify({ phone, password, role: 'VENDOR' }) });
+    return startPartnerSession(data);
+  },
+
+  /** "Where do I stand?": the application status, the reason if refused, and the restaurant's own sheet. */
+  async fetchPartnerMe(): Promise<PartnerSession> {
+    return parsePartnerSession(await requestFull<any>('/api/partner/me'));
+  },
+
+  /** Fixes and re-sends the application (allowed while PENDING or after a refusal). */
+  async resubmitApplication(body: Record<string, unknown>): Promise<PartnerSession> {
+    return parsePartnerSession(await requestFull<any>('/api/partner/application', { method: 'PUT', body: JSON.stringify(body) }));
+  },
+
+  /** The restaurant refuses a new order, with a reason the customer will read (3 to 200 characters). */
+  async rejectOrder(orderId: string, reason: string): Promise<Order | null> {
+    return orderOrNull(await request<any>(`/api/orders/${encodeURIComponent(orderId)}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }));
   },
 
   async fetchAnalytics(range: 'today' | '7d' | '30d' = '7d'): Promise<AnalyticsData> {
@@ -403,8 +478,8 @@ export const apiService = {
   },
 
   // ── Customers ──
-  async fetchCustomers(search: string, cursor?: string | null): Promise<{ total: number; nextCursor: string | null; data: CustomerRow[] }> {
-    const params = new URLSearchParams({ limit: '30' });
+  async fetchCustomers(search: string, cursor?: string | null, limit = 30): Promise<{ total: number; nextCursor: string | null; data: CustomerRow[] }> {
+    const params = new URLSearchParams({ limit: String(limit) });
     if (search.trim()) params.set('search', search.trim());
     if (cursor) params.set('cursor', cursor);
     const body = await requestFull<{ total: number; nextCursor: string | null; data: CustomerRow[] }>(`/api/admin/customers?${params.toString()}`);
@@ -633,5 +708,246 @@ export const apiService = {
     const parsed = parseReveal(await requestFull<any>(`${accountPath(userId)}/reveal`, { method: 'POST', body: '{}' }));
     if (!parsed) throw unexpected('affichage du compte de versement');
     return parsed;
+  },
+  // ───────────── Modular platform (backend/docs/MODULES_RECAP_FRONT.md) ─────────────
+
+  async fetchModules(): Promise<PlatformModule[]> {
+    return parseList(await requestFull<any>('/api/admin/modules'), parseModule);
+  },
+
+  /** `cascade: true` also switches off the modules that depend on this one (the server asks for it with MODULE_DEPENDENTS). */
+  async toggleModule(code: string, enabled: boolean, cascade = false): Promise<ToggleResult> {
+    return parseToggle(await requestFull<any>(`/api/admin/modules/${encodeURIComponent(code)}/toggle`, { method: 'PATCH', body: json({ enabled, cascade }) }));
+  },
+
+  async fetchModuleSettings(code: string): Promise<ModuleSetting[]> {
+    return parseList(await requestFull<any>(`/api/admin/modules/${encodeURIComponent(code)}/settings`), parseSetting);
+  },
+
+  async saveModuleSetting(code: string, key: string, value: unknown): Promise<SettingSaved> {
+    return parseSettingSaved(await requestFull<any>(`/api/admin/modules/${encodeURIComponent(code)}/settings/${encodeURIComponent(key)}`, { method: 'PATCH', body: json({ value }) }));
+  },
+
+  async fetchModuleAudit(page = 1, pageSize = 25, moduleCode?: string): Promise<Paged<AuditEntry>> {
+    const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+    if (moduleCode) params.set('module', moduleCode);
+    return parsePaged(await requestFull<any>(`/api/admin/modules/audit-log?${params}`), parseAuditEntry);
+  },
+
+  async fetchZones(city = 'default'): Promise<ZoneRow[]> {
+    return parseList(await requestFull<any>(`/api/admin/delivery-zones?city=${encodeURIComponent(city)}`), parseZone);
+  },
+
+  /** Replaces the whole grid of a city. */
+  async saveZones(city: string, zones: Zone[]): Promise<ZoneRow[]> {
+    return parseList(await requestFull<any>('/api/admin/delivery-zones', { method: 'PUT', body: json({ city, zones }) }), parseZone);
+  },
+
+  async fetchPromotions(page = 1, pageSize = 50): Promise<Paged<Promotion>> {
+    return parsePaged(await requestFull<any>(`/api/admin/promotions?page=${page}&pageSize=${pageSize}`), parsePromotion);
+  },
+  async createPromotion(body: Record<string, unknown>): Promise<Promotion> {
+    const created = parsePromotion((await requestFull<any>('/api/admin/promotions', { method: 'POST', body: json(body) })).data);
+    if (!created) throw unexpected('promotion');
+    return created;
+  },
+  async updatePromotion(id: string, body: Record<string, unknown>): Promise<Promotion> {
+    const updated = parsePromotion((await requestFull<any>(`/api/admin/promotions/${encodeURIComponent(id)}`, { method: 'PATCH', body: json(body) })).data);
+    if (!updated) throw unexpected('promotion');
+    return updated;
+  },
+  async deletePromotion(id: string): Promise<void> {
+    await send(`/api/admin/promotions/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  },
+  async fetchPromotionStats(id: string): Promise<PromotionStats> {
+    return parsePromotionStats(await requestFull<any>(`/api/admin/promotions/${encodeURIComponent(id)}/stats`));
+  },
+
+  async fetchPlans(): Promise<SubscriptionPlan[]> { return parseList(await requestFull<any>('/api/admin/subscription-plans'), parsePlan); },
+  async savePlan(id: string | null, body: Record<string, unknown>): Promise<void> {
+    await send(id ? `/api/admin/subscription-plans/${encodeURIComponent(id)}` : '/api/admin/subscription-plans', { method: id ? 'PATCH' : 'POST', body: json(body) });
+  },
+  async deletePlan(id: string): Promise<void> { await send(`/api/admin/subscription-plans/${encodeURIComponent(id)}`, { method: 'DELETE' }); },
+
+  async fetchLoyaltyRules(): Promise<LoyaltyRule[]> { return parseList(await requestFull<any>('/api/admin/loyalty-rules'), parseLoyaltyRule); },
+  async saveLoyaltyRule(id: string | null, body: Record<string, unknown>): Promise<void> {
+    await send(id ? `/api/admin/loyalty-rules/${encodeURIComponent(id)}` : '/api/admin/loyalty-rules', { method: id ? 'PATCH' : 'POST', body: json(body) });
+  },
+  async deleteLoyaltyRule(id: string): Promise<void> { await send(`/api/admin/loyalty-rules/${encodeURIComponent(id)}`, { method: 'DELETE' }); },
+
+  async fetchCourierBonuses(): Promise<CourierBonus[]> { return parseList(await requestFull<any>('/api/admin/courier-bonuses'), parseBonus); },
+  async saveCourierBonus(id: string | null, body: Record<string, unknown>): Promise<void> {
+    await send(id ? `/api/admin/courier-bonuses/${encodeURIComponent(id)}` : '/api/admin/courier-bonuses', { method: id ? 'PATCH' : 'POST', body: json(body) });
+  },
+  async deleteCourierBonus(id: string): Promise<void> { await send(`/api/admin/courier-bonuses/${encodeURIComponent(id)}`, { method: 'DELETE' }); },
+
+  async fetchCampaigns(page = 1, pageSize = 50): Promise<Paged<Campaign>> {
+    return parsePaged(await requestFull<any>(`/api/admin/campaigns?page=${page}&pageSize=${pageSize}`), parseCampaign);
+  },
+  async saveCampaign(id: string | null, body: Record<string, unknown>): Promise<void> {
+    await send(id ? `/api/admin/campaigns/${encodeURIComponent(id)}` : '/api/admin/campaigns', { method: id ? 'PATCH' : 'POST', body: json(body) });
+  },
+  async deleteCampaign(id: string): Promise<void> { await send(`/api/admin/campaigns/${encodeURIComponent(id)}`, { method: 'DELETE' }); },
+  async sendCampaign(id: string): Promise<CampaignSendResult> { return parseSendResult(await requestFull<any>(`/api/admin/campaigns/${encodeURIComponent(id)}/send`, { method: 'POST', body: '{}' })); },
+  async fetchCampaignStats(id: string): Promise<CampaignStats> { return parseCampaignStats(await requestFull<any>(`/api/admin/campaigns/${encodeURIComponent(id)}/stats`)); },
+
+  /** Prices a hypothetical order step by step. Writes nothing; `overrides` tries a module before it is switched on. */
+  async simulatePricing(input: Record<string, unknown>): Promise<SimulationResult> {
+    return parseSimulation(await requestFull<any>('/api/admin/pricing/simulate', { method: 'POST', body: json(input) }));
+  },
+
+  // ───────────── Support and reviews (backend/docs/ADMIN_SUPPORT_STATS.md) ─────────────
+
+  async fetchTickets(filters: { status?: string; category?: string; priority?: string; assignedTo?: string; q?: string }, page = 1, pageSize = 25): Promise<Paged<Ticket>> {
+    const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+    for (const [k, v] of Object.entries(filters)) if (v) params.set(k, v);
+    return parsePaged(await requestFull<any>(`/api/admin/support/tickets?${params}`), parseTicket);
+  },
+  async fetchTicket(id: string): Promise<Ticket> {
+    const t = parseTicket((await requestFull<any>(`/api/admin/support/tickets/${encodeURIComponent(id)}`)).data);
+    if (!t) throw unexpected('réclamation');
+    return t;
+  },
+  async updateTicket(id: string, body: { status?: string; priority?: string; assignedTo?: string | null; resolution?: string }): Promise<void> {
+    await send(`/api/admin/support/tickets/${encodeURIComponent(id)}`, { method: 'PATCH', body: json(body) });
+  },
+  async replyTicket(id: string, message: string, internal: boolean): Promise<void> {
+    await send(`/api/admin/support/tickets/${encodeURIComponent(id)}/messages`, { method: 'POST', body: json({ message, internal }) });
+  },
+  async fetchSupportStats(range = '30d'): Promise<SupportStats> { return parseSupportStats(await requestFull<any>(`/api/admin/support/stats?range=${range}`)); },
+
+  async fetchReviews(filters: { rating?: string; flagged?: string; vendorId?: string }, page = 1, pageSize = 25): Promise<Paged<Review>> {
+    const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+    for (const [k, v] of Object.entries(filters)) if (v) params.set(k, v);
+    return parsePaged(await requestFull<any>(`/api/admin/reviews?${params}`), parseReview);
+  },
+  async fetchReviewStats(range = '30d'): Promise<ReviewStats> { return parseReviewStats(await requestFull<any>(`/api/admin/reviews/stats?range=${range}`)); },
+  async flagReview(id: string, flagged: boolean, reason?: string): Promise<void> {
+    await send(`/api/admin/reviews/${encodeURIComponent(id)}/flag`, { method: 'PATCH', body: json(flagged ? { flagged, reason } : { flagged }) });
+  },
+  /** One call for the whole dashboard: orders, live counters, sign-ups, partners, reviews, support. Previous period included. */
+  async fetchOverview(range: StatsRange = '7d'): Promise<Overview> {
+    return parseOverview(await requestFull<any>(`/api/admin/stats/overview?range=${range}`));
+  },
+
+  /** Counters only (cheap): refresh every 30 s for the live banner. */
+  async fetchLiveCounts(): Promise<LiveCounts> {
+    return parseLiveCounts(await requestFull<any>('/api/admin/orders/live?list=false'));
+  },
+
+  /** What the team did on partners, orders and reviews (not the module log). */
+  async fetchTeamAudit(limit = 100): Promise<TeamAuditEntry[]> {
+    return parseList(await requestFull<any>(`/api/admin/audit-log?limit=${limit}`), parseTeamAudit);
+  },
+
+  /** Payments captured at the provider that no order accounts for. Read-only; at most 7 days. */
+  async fetchOrphanPayments(hours = 24): Promise<OrphanReport> {
+    const to = new Date(); const from = new Date(to.getTime() - hours * 3_600_000);
+    return parseOrphanReport(await requestFull<any>(`/api/admin/payments/reconcile?from=${from.toISOString()}&to=${to.toISOString()}`));
+  },
+  async fetchReferrals(status: string, page = 1, pageSize = 25): Promise<Paged<Referral>> {
+    const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+    if (status) params.set('status', status);
+    return parsePaged(await requestFull<any>(`/api/admin/referrals?${params}`), parseReferral);
+  },
+  async fetchReferralStats(): Promise<ReferralStats> { return parseReferralStats(await requestFull<any>('/api/admin/referrals/stats')); },
+  /** Only a pending referral can be cancelled (a suspicious one). */
+  async cancelReferral(id: string): Promise<void> { await send(`/api/admin/referrals/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: '{}' }); },
+  // ───────────── Legal documents and help articles ─────────────
+
+  async fetchLegalDocuments(): Promise<LegalDocument[]> { return parseList(await requestFull<any>('/api/admin/legal-documents'), parseLegalDocument); },
+  async fetchLegalDocument(id: string): Promise<LegalDocument> {
+    const d = parseLegalDocument((await requestFull<any>(`/api/admin/legal-documents/${encodeURIComponent(id)}`)).data);
+    if (!d) throw unexpected('document légal');
+    return d;
+  },
+  async saveLegalDocument(id: string | null, body: Record<string, unknown>): Promise<void> {
+    await send(id ? `/api/admin/legal-documents/${encodeURIComponent(id)}` : '/api/admin/legal-documents', { method: id ? 'PATCH' : 'POST', body: json(body) });
+  },
+  async legalAction(id: string, action: 'publish' | 'unpublish' | 'activate'): Promise<void> {
+    await send(`/api/admin/legal-documents/${encodeURIComponent(id)}/${action}`, { method: 'POST', body: '{}' });
+  },
+  async deleteLegalDocument(id: string): Promise<void> { await send(`/api/admin/legal-documents/${encodeURIComponent(id)}`, { method: 'DELETE' }); },
+
+  async fetchHelpArticles(): Promise<HelpArticle[]> { return parseList(await requestFull<any>('/api/admin/help-articles'), parseHelpArticle); },
+  async fetchHelpArticle(id: string): Promise<HelpArticle> {
+    const a = parseHelpArticle((await requestFull<any>(`/api/admin/help-articles/${encodeURIComponent(id)}`)).data);
+    if (!a) throw unexpected('article d’aide');
+    return a;
+  },
+  async saveHelpArticle(id: string | null, body: Record<string, unknown>): Promise<void> {
+    await send(id ? `/api/admin/help-articles/${encodeURIComponent(id)}` : '/api/admin/help-articles', { method: id ? 'PATCH' : 'POST', body: json(body) });
+  },
+  async deleteHelpArticle(id: string): Promise<void> { await send(`/api/admin/help-articles/${encodeURIComponent(id)}`, { method: 'DELETE' }); },
+  // ───────────── Team (roles and personal codes) ─────────────
+
+  async fetchTeam(): Promise<TeamMember[]> { return parseList(await requestFull<any>('/api/admin/team'), parseTeamMember); },
+  /** The personal code is returned ONCE: the caller shows it and keeps nothing. */
+  async createTeamMember(body: { name: string; phone: string; role: string }): Promise<{ member: TeamMember | null; passcode: string }> {
+    const res = await requestFull<any>('/api/admin/team', { method: 'POST', body: json(body) });
+    return { member: parseTeamMember(res.data), passcode: typeof res.passcode === 'string' ? res.passcode : '' };
+  },
+  async updateTeamMember(id: string, body: { role?: string; disabled?: boolean }): Promise<void> {
+    await send(`/api/admin/team/${encodeURIComponent(id)}`, { method: 'PATCH', body: json(body) });
+  },
+  async resetTeamPasscode(id: string): Promise<string> {
+    const res = await requestFull<any>(`/api/admin/team/${encodeURIComponent(id)}/reset-passcode`, { method: 'POST', body: '{}' });
+    return typeof res.passcode === 'string' ? res.passcode : '';
+  },
+
+  // ───────────── Prospecting (recruitment pipeline) ─────────────
+
+  async fetchProspects(filters: { stage?: string; kind?: string; q?: string; overdue?: boolean }, page = 1, pageSize = 100): Promise<Paged<Prospect>> {
+    const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+    if (filters.stage) params.set('stage', filters.stage);
+    if (filters.kind) params.set('kind', filters.kind);
+    if (filters.q) params.set('q', filters.q);
+    if (filters.overdue) params.set('overdue', 'true');
+    return parsePaged(await requestFull<any>(`/api/admin/prospects?${params}`), parseProspect);
+  },
+  async fetchProspectStats(): Promise<ProspectStats> { return parseProspectStats(await requestFull<any>('/api/admin/prospects/stats')); },
+  async fetchProspect(id: string): Promise<ProspectDetail> {
+    const p = parseProspectDetail((await requestFull<any>(`/api/admin/prospects/${encodeURIComponent(id)}`)).data);
+    if (!p) throw unexpected('contact de prospection');
+    return p;
+  },
+  async saveProspect(id: string | null, body: Record<string, unknown>): Promise<void> {
+    await send(id ? `/api/admin/prospects/${encodeURIComponent(id)}` : '/api/admin/prospects', { method: id ? 'PATCH' : 'POST', body: json(body) });
+  },
+  async addProspectEvent(id: string, body: { type: string; body: string; nextFollowUpAt?: string | null }): Promise<void> {
+    await send(`/api/admin/prospects/${encodeURIComponent(id)}/events`, { method: 'POST', body: json(body) });
+  },
+  async deleteProspect(id: string): Promise<void> { await send(`/api/admin/prospects/${encodeURIComponent(id)}`, { method: 'DELETE' }); },
+  // ───────────── My security: two-step sign-in and sessions ─────────────
+
+  async fetchMyTeamInfo() { return parseTeamMe(await requestFull<any>('/api/admin/team/me')); },
+  async startTwoFactor(): Promise<TwoFactorSetup> {
+    const setup = parseTwoFactorSetup(await requestFull<any>('/api/admin/team/me/2fa/setup', { method: 'POST', body: '{}' }));
+    if (!setup) throw unexpected('double authentification');
+    return setup;
+  },
+  /** The backup codes come back ONCE: show them, keep nothing. */
+  async enableTwoFactor(code: string): Promise<string[]> {
+    const res = await requestFull<any>('/api/admin/team/me/2fa/enable', { method: 'POST', body: json({ code }) });
+    return Array.isArray(res.backupCodes) ? res.backupCodes.filter((c: unknown): c is string => typeof c === 'string') : [];
+  },
+  async disableTwoFactor(code: string): Promise<void> { await send('/api/admin/team/me/2fa/disable', { method: 'POST', body: json({ code }) }); },
+  async fetchMySessions(): Promise<AdminSessionRow[]> { return parseList(await requestFull<any>('/api/admin/team/me/sessions'), parseAdminSession); },
+  async revokeMySession(id: string): Promise<void> { await send(`/api/admin/team/me/sessions/${encodeURIComponent(id)}`, { method: 'DELETE' }); },
+  async revokeOtherSessions(): Promise<number> {
+    const res = await requestFull<any>('/api/admin/team/me/sessions/revoke-others', { method: 'POST', body: '{}' });
+    return typeof res.closed === 'number' ? res.closed : 0;
+  },
+  async resetTeamTwoFactor(id: string): Promise<void> { await send(`/api/admin/team/${encodeURIComponent(id)}/reset-2fa`, { method: 'POST', body: '{}' }); },
+  // ───────────── Service areas: where the app is available ─────────────
+
+  async fetchServiceAreas(): Promise<ServiceAreasInfo> { return parseServiceAreas(await requestFull<any>('/api/admin/service-areas')); },
+  async saveServiceArea(id: string | null, body: Record<string, unknown>): Promise<void> {
+    await send(id ? `/api/admin/service-areas/${encodeURIComponent(id)}` : '/api/admin/service-areas', { method: id ? 'PATCH' : 'POST', body: json(body) });
+  },
+  async deleteServiceArea(id: string): Promise<void> { await send(`/api/admin/service-areas/${encodeURIComponent(id)}`, { method: 'DELETE' }); },
+  /** Would this point be served, for a restaurant and for a customer, under the rule as it is now? Writes nothing. */
+  async checkServicePoint(lat: number, lng: number): Promise<PointCheck> {
+    return parsePointCheck(await requestFull<any>('/api/admin/service-areas/check', { method: 'POST', body: json({ lat, lng }) }));
   },
 };

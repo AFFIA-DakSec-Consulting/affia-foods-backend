@@ -5,6 +5,7 @@ import 'package:kraveo_ui/kraveo_ui.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import '../models/order.dart';
+import '../models/payment_method.dart';
 import '../providers/cart_provider.dart';
 import '../providers/dhaba_provider.dart';
 import '../providers/order_provider.dart';
@@ -29,7 +30,8 @@ import 'live_tracking_screen.dart';
 import 'payment_success_screen.dart';
 
 /// Checkout: the order is created on the server FIRST (`POST /orders`, idempotent per cart),
-/// the server's bill is shown, then Razorpay runs on that same order. A failed or cancelled
+/// the server's bill is shown, then it is paid with the chosen method (Wave, Orange Money or
+/// cash, `POST /payments/simulate` while payments are simulated). A failed or cancelled
 /// payment keeps the order (PENDING) and offers "Try payment again" on it; nothing here ever
 /// creates a second order for the same cart.
 ///
@@ -54,7 +56,8 @@ class CheckoutScreen extends StatefulWidget {
 class _CheckoutScreenState extends State<CheckoutScreen> {
   String? _currentHostel;
   final TextEditingController _deliveryNoteController = TextEditingController();
-  String _selectedPaymentMethod = 'Pay online via Razorpay';
+  /// Chosen payment method id (`WAVE`, `ORANGE_MONEY`, `CASH`); Wave until the student picks.
+  String _methodId = 'WAVE';
 
   /// A request (place, pay or cancel) is running: buttons show progress, back is blocked.
   bool _busy = false;
@@ -80,17 +83,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   /// The server's price for the cart (debounced `POST /orders/quote`).
   late final QuoteController _quote;
 
-  final List<Map<String, dynamic>> _paymentOptions = [
-    {
-      'name': 'Pay online via Razorpay',
-      'icon': LucideIcons.smartphone,
-      'sub': 'UPI, cards and more',
-    },
-  ];
-
   @override
   void initState() {
     super.initState();
+    // Wave / Orange Money / cash with their logos (the defaults show until they arrive).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(context.read<OrderProvider>().loadPaymentMethods());
+    });
     // Legacy spellings ("Block 2") become the canonical name; an unknown value (the removed
     // "VIT Main Gate") means the student has to choose again.
     _currentHostel = normalizeDropPoint(widget.selectedHostel ?? context.read<SessionProvider>().deliveryPoint);
@@ -253,7 +252,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           // say why and what the total is now (the next tap places the order without it).
           cart.removeCoupon();
           final reason = error.message ?? 'It can\'t be used on this order.';
-          message = 'Coupon removed. $reason Your total is now ${rupee(cart.grandTotal)}.';
+          message = 'Coupon removed. $reason Your total is now ${fcfa(cart.grandTotal)}.';
         case 'INVALID_ITEMS':
         case 'VENDOR_CLOSED':
         case 'VENDOR_UNAVAILABLE':
@@ -312,7 +311,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       _busy = true;
       _notice = null;
     });
-    final outcome = await orders.payForOrder(id, contact: context.read<SessionProvider>().user?.phone);
+    final methods = orders.paymentMethods;
+    final method = methods.any((m) => m.id == _methodId) ? _methodId : methods.first.id;
+    final outcome = await orders.payForOrder(id, contact: context.read<SessionProvider>().user?.phone, method: method);
     if (!mounted) return;
     switch (outcome.kind) {
       case PaymentOutcomeKind.paid:
@@ -384,7 +385,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       MaterialPageRoute(
         builder: (context) => PaymentSuccessScreen(
           orderId: orderId,
-          amountLabel: rupee(order.totalAmount),
+          amountLabel: fcfa(order.totalAmount),
           vendorName: order.isGroup ? 'your ${order.group!.size} restaurants' : (order.vendorName.isEmpty ? 'the kitchen' : order.vendorName),
           confirming: confirming,
           onContinue: () {
@@ -474,7 +475,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           if (blockMessage != null && !keyboardOpen) _NoticeLine(message: blockMessage, error: true),
           if (_notice != null && !keyboardOpen && _notice != blockMessage) _NoticeLine(message: _notice!, error: true),
           KButton(
-            label: _currentHostel == null ? 'Choose drop-off' : 'Pay ${rupee(_shownTotal(cart))}',
+            label: _currentHostel == null ? 'Choose drop-off' : 'Pay ${fcfa(_shownTotal(cart))}',
             icon: _currentHostel == null ? LucideIcons.mapPin : LucideIcons.lock,
             kind: _currentHostel == null ? KButtonKind.accent : KButtonKind.primary,
             loading: busy,
@@ -531,8 +532,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         if (priceChanged) ...[
           _InfoCard(
             icon: LucideIcons.badgeInfo,
-            title: 'Updated total: ${rupee(order.totalAmount)}',
-            message: 'Kraveo priced your order at ${rupee(order.totalAmount)} (your cart estimate was ${rupee(_previewTotal!)}). Check the bill below before you pay.',
+            title: 'Updated total: ${fcfa(order.totalAmount)}',
+            message: 'Kraveo priced your order at ${fcfa(order.totalAmount)} (your cart estimate was ${fcfa(_previewTotal!)}). Check the bill below before you pay.',
           ),
           const SizedBox(height: 14),
         ],
@@ -587,7 +588,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Expanded(child: Text('${line.quantity} × ${line.name}', maxLines: 2, overflow: TextOverflow.ellipsis, style: KraveoType.body.copyWith(color: k.ink, fontWeight: FontWeight.w600, fontSize: 14))),
             const SizedBox(width: 12),
-            Text(rupee(line.lineTotal), style: KraveoType.body.copyWith(color: k.ink, fontWeight: FontWeight.w700, fontSize: 14)),
+            Text(fcfa(line.lineTotal), style: KraveoType.body.copyWith(color: k.ink, fontWeight: FontWeight.w700, fontSize: 14)),
           ]),
         ),
     ]);
@@ -615,7 +616,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       label = 'Track your order';
       icon = LucideIcons.bike;
     } else {
-      label = _paymentAttempted ? 'Try payment again · ${rupee(order.totalAmount)}' : 'Pay ${rupee(order.totalAmount)}';
+      label = _paymentAttempted ? 'Try payment again · ${fcfa(order.totalAmount)}' : 'Pay ${fcfa(order.totalAmount)}';
       icon = LucideIcons.lock;
     }
     return KSheetFooter(
@@ -725,7 +726,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           ]),
         ),
         const SizedBox(width: 12),
-        Text(rupee(item.totalPrice), style: KraveoType.body.copyWith(color: k.ink, fontWeight: FontWeight.w700, fontSize: 14)),
+        Text(fcfa(item.totalPrice), style: KraveoType.body.copyWith(color: k.ink, fontWeight: FontWeight.w700, fontSize: 14)),
       ]),
     );
   }
@@ -740,14 +741,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             padding: const EdgeInsets.only(top: 8, bottom: 2),
             child: Semantics(
               header: true,
-              label: '${r.name}, ${rupee(r.subtotal)}',
+              label: '${r.name}, ${fcfa(r.subtotal)}',
               child: ExcludeSemantics(
                 child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Icon(LucideIcons.store, size: 16, color: k.brand),
                   const SizedBox(width: 8),
                   Expanded(child: Text(r.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: KraveoType.titleMd.copyWith(color: k.ink))),
                   const SizedBox(width: 12),
-                  Text(rupee(r.subtotal), style: KraveoType.body.copyWith(color: k.inkMuted, fontWeight: FontWeight.w700, fontSize: 14)),
+                  Text(fcfa(r.subtotal), style: KraveoType.body.copyWith(color: k.inkMuted, fontWeight: FontWeight.w700, fontSize: 14)),
                 ]),
               ),
             ),
@@ -762,43 +763,87 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   Widget _buildPayment(BuildContext context, KraveoTokens k) {
+    final orders = context.watch<OrderProvider>();
+    final methods = orders.paymentMethods;
+    final selected = methods.any((m) => m.id == _methodId) ? _methodId : methods.first.id;
     return Column(children: [
-      for (final opt in _paymentOptions)
-        Builder(builder: (context) {
-          final isSelected = _selectedPaymentMethod == opt['name'];
-          return KPressable(
-            onTap: () => setState(() => _selectedPaymentMethod = opt['name']),
-            scale: 0.985,
-            semanticLabel: '${opt['name']}, ${opt['sub']}${isSelected ? ', selected' : ''}',
-            child: AnimatedContainer(
-              duration: KMotion.base,
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: isSelected ? k.brandSoft : k.surface,
-                borderRadius: BorderRadius.circular(KRadius.md),
-                border: Border.all(color: isSelected ? k.brand : k.line, width: isSelected ? 1.6 : 1.2),
-              ),
-              child: Row(children: [
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(color: isSelected ? k.brand : k.surfaceAlt, shape: BoxShape.circle),
-                  child: Icon(opt['icon'] as IconData, size: 20, color: isSelected ? k.onBrand : k.inkMuted),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(opt['name'] as String, style: KraveoType.titleMd.copyWith(color: k.ink)),
-                    Text(opt['sub'] as String, style: KraveoType.bodySm.copyWith(color: k.inkMuted)),
-                  ]),
-                ),
-                const SizedBox(width: 8),
-                Icon(isSelected ? LucideIcons.circleCheck : LucideIcons.circle, color: isSelected ? k.brand : k.inkFaint),
-              ]),
+      for (final (i, m) in methods.indexed) ...[
+        if (i > 0) const SizedBox(height: 10),
+        _PaymentMethodTile(
+          method: m,
+          selected: m.id == selected,
+          enabled: !_busy,
+          onTap: () => setState(() => _methodId = m.id),
+        ),
+      ],
+      if (orders.paymentsSimulated == true) ...[
+        const SizedBox(height: 12),
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Padding(padding: const EdgeInsets.only(top: 1), child: Icon(LucideIcons.flaskConical, size: 15, color: k.inkMuted)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Mode test : le paiement est simulé, aucun montant n\'est débité.',
+              style: KraveoType.bodySm.copyWith(color: k.inkMuted),
             ),
-          );
-        }),
+          ),
+        ]),
+      ],
     ]);
+  }
+}
+
+/// One payment method: its logo (or an icon while the logos load), name and description, and a
+/// radio mark.
+class _PaymentMethodTile extends StatelessWidget {
+  const _PaymentMethodTile({required this.method, required this.selected, required this.enabled, required this.onTap});
+
+  final PaymentMethod method;
+  final bool selected;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final k = context.k;
+    final fallback = Icon(method.isCash ? LucideIcons.banknote : LucideIcons.smartphone, size: 20, color: selected ? k.brand : k.inkMuted);
+    return KPressable(
+      onTap: enabled ? onTap : null,
+      scale: 0.985,
+      semanticLabel: '${method.name}, ${method.description}${selected ? ', sélectionné' : ''}',
+      child: AnimatedContainer(
+        duration: KMotion.base,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: selected ? k.brandSoft : k.surface,
+          borderRadius: BorderRadius.circular(KRadius.md),
+          border: Border.all(color: selected ? k.brand : k.line, width: selected ? 1.6 : 1.2),
+        ),
+        child: Row(children: [
+          Container(
+            width: 46,
+            height: 46,
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(color: k.surface, borderRadius: BorderRadius.circular(KRadius.sm), border: Border.all(color: k.line)),
+            child: method.logoUrl.isEmpty
+                ? fallback
+                : Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Image.network(method.logoUrl, fit: BoxFit.contain, errorBuilder: (_, __, ___) => fallback),
+                  ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(method.name, style: KraveoType.titleMd.copyWith(color: k.ink)),
+              if (method.description.isNotEmpty) Text(method.description, style: KraveoType.bodySm.copyWith(color: k.inkMuted)),
+            ]),
+          ),
+          const SizedBox(width: 8),
+          Icon(selected ? LucideIcons.circleCheck : LucideIcons.circle, color: selected ? k.brand : k.inkFaint),
+        ]),
+      ),
+    );
   }
 }
 

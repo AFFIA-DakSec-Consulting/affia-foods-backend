@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DriverPin, normalizeDriverPin } from '../types';
-import { formatLatLng, groupDropPins, FALLBACK_DROP_POINTS, campusCenter, isNearCampus, parseLocationInput, vendorHasRealPin } from './campus';
+import { formatLatLng, groupDropPins, FALLBACK_DROP_POINTS, campusCenter, isInSenegal, parseLocationInput, vendorHasRealPin } from './campus';
 import { STALE_AFTER_MS, ageLabel, countByState, mergeRiderPins, newestPerRider, replaceRiderPins, riderMarkerState } from './riderMarkers';
 
 const NOW = Date.parse('2026-10-06T10:00:00Z');
@@ -141,9 +141,14 @@ describe('campus helpers', () => {
     expect(pins.find((p) => p.names.includes('BH2'))!.names).toEqual(['BH2', 'BH3']);
     expect(pins.find((p) => p.names.includes('Special Block'))!.names).toEqual(['BH4', 'BH5', 'Special Block']);
   });
+  it('the box of Senegal knows the main cities and refuses other places', () => {
+    expect(isInSenegal(14.6937, -17.4441)).toBe(true);
+    expect(isInSenegal(14.7886, -16.926)).toBe(true);
+    expect(isInSenegal(48.8566, 2.3522)).toBe(false);
+    expect(isInSenegal(NaN, 0)).toBe(false);
+  });
   it('centre is on campus and near the backend value', () => {
     const c = campusCenter();
-    expect(isNearCampus(c.lat, c.lng)).toBe(true);
     expect(c.lat).toBeCloseTo(23.0739, 3);
     expect(c.lng).toBeCloseTo(76.8575, 3);
   });
@@ -161,8 +166,8 @@ describe('campus helpers', () => {
     expect(parseLocationInput('23.0745')).toMatchObject({ ok: false });
     expect(parseLocationInput('95, 76.8')).toMatchObject({ ok: false, message: expect.stringContaining('latitude') });
     expect(parseLocationInput('23.07, 190')).toMatchObject({ ok: false, message: expect.stringContaining('longitude') });
-    expect(parseLocationInput('28.6139, 77.2090')).toMatchObject({ ok: false, message: expect.stringContaining('km du campus') });
-    expect(parseLocationInput('76.8590, 23.0745')).toMatchObject({ ok: false }); // swapped
+    expect(parseLocationInput('28.6139, 77.2090')).toMatchObject({ ok: true }); // any real point parses: the server decides what is served
+    expect(parseLocationInput('-17.4441, 14.6937')).toMatchObject({ ok: false, message: expect.stringContaining('inversées') }); // Dakar, swapped
   });
   it('knows the placeholder pin is not a real location', () => {
     expect(vendorHasRealPin({ lat: 23.0768, lng: 76.8524 })).toBe(false);
@@ -192,7 +197,7 @@ describe('parseLocationInput: degrees-minutes-seconds', () => {
   });
   it('rejects two latitudes and far-away points; decimals still work', () => {
     expect(parseLocationInput('23°04\'53.4"N 23°04\'53.4"N').ok).toBe(false);
-    expect(parseLocationInput('28°04\'53.4"N 77°50\'35.0"E').ok).toBe(false);
+    expect(parseLocationInput('-17°26\'38.0" 14°41\'37.0"').ok).toBe(false); // Dakar, swapped
     expect(parseLocationInput('23.0745, 76.8590')).toEqual({ ok: true, lat: 23.0745, lng: 76.859 });
   });
 });
